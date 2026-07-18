@@ -10,10 +10,7 @@ import (
 // Version is set at build time via -ldflags "-X agent_stock/cmd.Version=v0.1.0"
 var Version = "dev"
 
-var (
-	cfgFile string
-	verbose bool
-)
+var verbose bool
 
 var rootCmd = &cobra.Command{
 	Use:   "agent",
@@ -22,7 +19,6 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default: config.json or $AGENT_CONFIG)")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable debug logging")
 
 	rootCmd.AddCommand(versionCmd())
@@ -37,16 +33,6 @@ func versionCmd() *cobra.Command {
 			fmt.Printf("agent %s\n", Version)
 		},
 	}
-}
-
-func resolveConfigPath() string {
-	if cfgFile != "" {
-		return cfgFile
-	}
-	if v := os.Getenv("AGENT_CONFIG"); v != "" {
-		return v
-	}
-	return "config.json"
 }
 
 // Execute runs the root cobra command.

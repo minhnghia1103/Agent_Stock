@@ -1,42 +1,30 @@
 package config
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
+
+	"github.com/joho/godotenv"
 )
 
-// Load reads config from path (optional file), then applies env overrides.
-// Missing config file is OK — defaults are used.
-func Load(path string) (*Config, error) {
+// Load applies defaults, loads .env (if present), then reads process env.
+func Load() (*Config, error) {
 	cfg := Defaults()
 
-	if path != "" {
-		if err := loadFile(path, &cfg); err != nil {
-			return nil, err
-		}
+	envFile := os.Getenv("AGENT_ENV_FILE")
+	if envFile == "" {
+		envFile = ".env"
 	}
+	// Missing .env is OK — defaults + exported env still work.
+	_ = godotenv.Load(envFile)
 
 	applyEnv(&cfg)
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
 	return &cfg, nil
-}
-
-func loadFile(path string, cfg *Config) error {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("read config %s: %w", path, err)
-	}
-	if err := json.Unmarshal(data, cfg); err != nil {
-		return fmt.Errorf("parse config %s: %w", path, err)
-	}
-	return nil
 }
 
 func applyEnv(cfg *Config) {
@@ -48,11 +36,17 @@ func applyEnv(cfg *Config) {
 			cfg.Port = p
 		}
 	}
+	if v := os.Getenv("AGENT_DATABASE_PATH"); v != "" {
+		cfg.DatabasePath = v
+	}
 }
 
 func (c *Config) validate() error {
 	if c.Port < 1 || c.Port > 65535 {
 		return fmt.Errorf("invalid port: %d", c.Port)
+	}
+	if strings.TrimSpace(c.DatabasePath) == "" {
+		return fmt.Errorf("database_path is required")
 	}
 	return nil
 }

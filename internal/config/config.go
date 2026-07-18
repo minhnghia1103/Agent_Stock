@@ -2,10 +2,11 @@ package config
 
 import "fmt"
 
-// Config is the root configuration object (Phase 0: host/port only).
+// Config is the root configuration object.
 type Config struct {
-	Host string `json:"host"`
-	Port int    `json:"port"`
+	Host         string
+	Port         int
+	DatabasePath string
 }
 
 // Addr returns host:port for net/http.

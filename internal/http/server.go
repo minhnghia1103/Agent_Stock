@@ -4,21 +4,24 @@ import (
 	"net/http"
 
 	"agent_stock/internal/config"
+	"agent_stock/internal/session"
 )
 
-// Server is the HTTP surface (health + chat stub).
+// Server is the HTTP surface (health + chat).
 type Server struct {
-	cfg     *config.Config
-	version string
-	mux     *http.ServeMux
+	cfg      *config.Config
+	version  string
+	sessions *session.Service
+	mux      *http.ServeMux
 }
 
 // New wires routes (composition root for HTTP).
-func New(cfg *config.Config, version string) *Server {
+func New(cfg *config.Config, version string, sessions *session.Service) *Server {
 	s := &Server{
-		cfg:     cfg,
-		version: version,
-		mux:     http.NewServeMux(),
+		cfg:      cfg,
+		version:  version,
+		sessions: sessions,
+		mux:      http.NewServeMux(),
 	}
 	s.mux.HandleFunc("GET /health", s.handleHealth)
 	s.mux.HandleFunc("POST /v1/chat", s.handleChat)

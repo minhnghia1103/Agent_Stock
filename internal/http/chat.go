@@ -4,21 +4,20 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-
-	"github.com/google/uuid"
 )
 
-// ChatRequest is the Phase 1 stub body for POST /v1/chat.
+// ChatRequest is the body for POST /v1/chat.
 type ChatRequest struct {
 	Message   string `json:"message"`
 	SessionID string `json:"session_id,omitempty"`
 }
 
-// ChatResponse is the stub reply (no LLM yet).
+// ChatResponse is the chat reply (Phase 2: stub text, persisted history).
 type ChatResponse struct {
-	SessionID string `json:"session_id"`
-	Reply     string `json:"reply"`
-	RequestID string `json:"request_id"`
+	SessionID    string `json:"session_id"`
+	Reply        string `json:"reply"`
+	RequestID    string `json:"request_id"`
+	MessageCount int    `json:"message_count"`
 }
 
 func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
@@ -34,22 +33,33 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_request", "message is required")
 		return
 	}
-
-	sessionID := req.SessionID
-	if sessionID == "" {
-		sessionID = uuid.NewString()
+	if s.sessions == nil {
+		writeError(w, r, http.StatusInternalServerError, "internal_error", "session service not configured")
+		return
 	}
 
 	reqID := RequestIDFromContext(r.Context())
-	slog.Info("chat stub",
+	result, err := s.sessions.ChatTurn(r.Context(), req.SessionID, req.Message)
+	if err != nil {
+		slog.Error("chat turn failed",
+			"request_id", reqID,
+			"session_id", req.SessionID,
+			"error", err,
+		)
+		writeError(w, r, http.StatusInternalServerError, "internal_error", "failed to persist chat turn")
+		return
+	}
+
+	slog.Info("chat turn",
 		"request_id", reqID,
-		"session_id", sessionID,
-		"message_len", len(req.Message),
+		"session_id", result.SessionID,
+		"message_count", result.MessageCount,
 	)
 
 	writeJSON(w, http.StatusOK, ChatResponse{
-		SessionID: sessionID,
-		Reply:     "echo: " + req.Message,
-		RequestID: reqID,
+		SessionID:    result.SessionID,
+		Reply:        result.Reply,
+		RequestID:    reqID,
+		MessageCount: result.MessageCount,
 	})
 }

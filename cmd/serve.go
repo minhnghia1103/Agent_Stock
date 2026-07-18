@@ -15,6 +15,8 @@ import (
 
 	"agent_stock/internal/config"
 	httpserver "agent_stock/internal/http"
+	"agent_stock/internal/session"
+	"agent_stock/internal/store/sqlite"
 )
 
 func serveCmd() *cobra.Command {
@@ -28,16 +30,26 @@ func serveCmd() *cobra.Command {
 }
 
 func runServe() {
-	setupLogging()
-
-	cfgPath := resolveConfigPath()
-	cfg, err := config.Load(cfgPath)
+	cfg, err := config.Load()
 	if err != nil {
-		slog.Error("failed to load config", "error", err, "path", cfgPath)
+		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
 		os.Exit(1)
 	}
+	setupLogging()
 
-	srv := httpserver.New(cfg, Version)
+	sessionStore, err := sqlite.Open(cfg.DatabasePath, sqlite.SchemaSQL())
+	if err != nil {
+		slog.Error("failed to open database", "error", err, "path", cfg.DatabasePath)
+		os.Exit(1)
+	}
+	defer func() {
+		if err := sessionStore.Close(); err != nil {
+			slog.Error("close database", "error", err)
+		}
+	}()
+
+	sessionSvc := session.NewService(sessionStore)
+	srv := httpserver.New(cfg, Version, sessionSvc)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -50,7 +62,10 @@ func runServe() {
 
 	errCh := make(chan error, 1)
 	go func() {
-		slog.Info("listening", "addr", cfg.Addr(), "config", cfgPath)
+		slog.Info("listening",
+			"addr", cfg.Addr(),
+			"database", cfg.DatabasePath,
+		)
 		errCh <- httpServer.ListenAndServe()
 	}()
 

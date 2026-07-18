@@ -1,9 +1,12 @@
 # Roadmap: AI Agent Gateway (Go) — Full Backend
 
-Mục tiêu: **đủ chức năng backend** của cả **goclaw** + **ews-agent** (union), viết bằng Go.
+Mục tiêu kép:
 
-- Có: API, agent loop, providers, tools, MCP, skills, workspace, sessions, memory, security, sandbox, channels, cron/heartbeat, teams/subagent, multi-tenant, progress streaming, CLI…
-- **Không làm UI** (`goclaw/ui/web` bỏ qua; không build React dashboard).
+1. **Sản phẩm:** backend agent (stock research) chạy được, giữ lại được — không viết code “demo rồi vứt”.
+2. **Năng lực:** dần đủ xương sống backend kiểu **goclaw** + **ews-agent** (union), viết bằng Go; roadmap = thứ tự xây, không phải bắt buộc ship đủ 28 mục ngày 1.
+
+- Có hướng tới: API, agent loop, providers, tools, MCP, skills, workspace, sessions, memory, security, sandbox, channels, cron/heartbeat, teams/subagent, multi-tenant, progress streaming, CLI…
+- **Không làm UI** (`goclaw/ui/web` bỏ qua; không build React dashboard) trừ khi product sau này cần riêng.
 
 Repo tham chiếu:
 
@@ -12,7 +15,20 @@ Repo tham chiếu:
 | goclaw | `/Users/nghia.nguyen2/Public/projectResearch/goclaw` |
 | ews-agent | `/Users/nghia.nguyen2/Public/projectResearch/ews-agent` |
 
-**Nguyên tắc học:** mỗi phase = mini-project chạy được; tham chiếu file bên dưới rồi **viết lại bằng Go**, không copy-paste nguyên khối. Song song học **design patterns** của goclaw + ews-agent — xem dòng **Patterns học** ở mỗi phase và **§10**.
+**Nguyên tắc học:** mỗi phase = slice chạy được; tham chiếu file bên dưới rồi **viết lại bằng Go**, không copy-paste nguyên khối. Song song học **design patterns** của goclaw + ews-agent — xem dòng **Patterns học** ở mỗi phase và **§10**.
+
+**Nguyên tắc sản phẩm (quan trọng):** đi đúng thứ tự phase, nhưng mỗi phần implement như **nền production**, không như đồ chơi.
+
+| Làm vậy | Tránh |
+|---------|--------|
+| Interface + 1 impl thật (giữ lại được) | Hard-code / fake vĩnh viễn không có chỗ thay |
+| Schema + migrate (SQLite local hoặc Postgres sớm) | JSON file “cho vui” rồi viết lại toàn bộ |
+| DTO/API shape giống bản ship | Stub lệch contract, Phase sau phá client |
+| Config/env, request-id, error JSON, log có `session_id` | Logic rải, lỗi không trace được |
+| Tools/domain stock hữu ích khi tới Phase 4 | Chỉ `get_time` mãi nếu product cần data thật |
+| “Done” = restart/deploy vẫn đúng hành vi phase đó | “Done” = curl một lần rồi quên |
+
+Roadmap là **menu + thứ tự**; scope ship theo product (cắt channel/MCP/sandbox… đến khi cần). Pattern và boundary vẫn làm đúng từ đầu để không refactor nát.
 
 ---
 
@@ -96,11 +112,13 @@ my-agent/
 └── go.mod
 ```
 
-Bắt đầu SQLite/file → chuyển Postgres khi Phase 10.
+**Persistence:** Phase 2 dùng `SessionStore` interface + impl **SQLite** (dev nhanh) hoặc **Postgres** (nếu đã chắc deploy). Tránh JSON-file làm store chính. Postgres/multi-tenant đầy đủ vẫn mở rộng ở Phase 10 — không chờ Phase 10 mới có DB thật.
 
 ---
 
 ## 3. Các phase học & xây (full backend)
+
+Mỗi phase: **Done** = hành vi phase đó giữ được sau restart (và sẵn sàng gắn phase sau), không chỉ demo tạm.
 
 ### Phase 0 — Nền Go + CLI + Config + Health
 
@@ -123,7 +141,7 @@ Bắt đầu SQLite/file → chuyển Postgres khi Phase 10.
 
 ### Phase 1 — HTTP Chat API (stub)
 
-**Làm:** `POST /v1/chat` echo; request/response structs; middleware request-id + recover.
+**Làm:** `POST /v1/chat` echo; request/response structs (**shape giữ tới khi gắn LLM**); middleware request-id + recover; error JSON thống nhất. Stub reply tạm OK — contract API thì coi như production.
 
 **Tham chiếu**
 
@@ -134,7 +152,7 @@ Bắt đầu SQLite/file → chuyển Postgres khi Phase 10.
 | Schemas | `pkg/protocol/` (events) | `ews_agent/schemas/agent.py` |
 | Errors | `pkg/protocol/errors.go` | `ews_agent/errors/catalog.py`, `response.py` |
 
-**Done:** curl chat nhận `session_id` + reply stub.
+**Done:** curl chat nhận `session_id` + reply stub; header `X-Request-ID` có mặt.
 
 **Patterns học:** Middleware Chain · DTO / Schema · Error Catalog · Decorator (recover, request-id)
 
@@ -142,7 +160,7 @@ Bắt đầu SQLite/file → chuyển Postgres khi Phase 10.
 
 ### Phase 2 — Session persistence
 
-**Làm:** bảng `sessions`/`messages`; load history; append sau turn.
+**Làm:** `SessionStore` interface; bảng `sessions`/`messages` (SQLite hoặc Postgres); load history; append sau turn; wire vào `POST /v1/chat`. Prefer DB + migration nhẹ — **không** lấy JSON-file làm store chính của product.
 
 **Tham chiếu**
 
@@ -151,19 +169,19 @@ Bắt đầu SQLite/file → chuyển Postgres khi Phase 10.
 | Session keys | `internal/sessions/key.go`, `manager.go` | — |
 | Store interface | `internal/store/session_store.go` | `ews_agent/protocols.py` (`SessionStoreProtocol`) |
 | PG impl | `internal/store/pg/sessions.go`, `sessions_list.go`, `sessions_ops.go` | `ews_agent/persistence/repositories/sessions.py`, `messages.py` |
-| File/Redis | — | `ews_agent/infra/session_store.py`, `persistence/redis_session.py` |
+| File/Redis | — | `ews_agent/infra/session_store.py`, `persistence/redis_session.py` (tham khảo Strategy; Redis optional sau) |
 | Service layer | — | `ews_agent/services/session_service.py` |
 | Migrations | `migrations/000001_*.up.sql` | `alembic/versions/` |
 
-**Done:** restart process, history còn.
+**Done:** restart process, history còn; cùng `session_id` load lại messages đã lưu.
 
-**Patterns học:** Repository · Strategy (file/Redis/Postgres) · Protocol / Interface Segregation · Service Layer
+**Patterns học:** Repository · Strategy (SQLite/Postgres; Redis sau nếu cần) · Protocol / Interface Segregation · Service Layer
 
 ---
 
 ### Phase 3 — LLM Provider(s)
 
-**Làm:** interface `Provider`; 1 provider OpenAI-compat trước; sau thêm Anthropic; retry/timeout/usage.
+**Làm:** interface `Provider`; 1 provider OpenAI-compat **gọi model thật** (không fake response làm xong phase); retry/timeout/usage; sau thêm Anthropic nếu product cần.
 
 **Tham chiếu**
 
@@ -184,7 +202,7 @@ Bắt đầu SQLite/file → chuyển Postgres khi Phase 10.
 
 ### Phase 4 — Agent loop + builtin tools (lõi)
 
-**Làm:** think→act→observe; `maxIterations`; registry tools; builtins: `get_time`, `read_file`, `list_dir`, `write_file`, `web_fetch` (sau).
+**Làm:** think→act→observe; `maxIterations`; registry tools; builtins học: `get_time`, `read_file`, `list_dir`, `write_file`, `web_fetch`. **Product:** thêm sớm 1–2 tools domain stock (giá/tin/…) thay vì chỉ tool đồ chơi.
 
 **Tham chiếu — loop**
 
@@ -616,21 +634,22 @@ Bắt đầu SQLite/file → chuyển Postgres khi Phase 10.
 ## 6. Thứ tự ưu tiên (full nhưng không loạn)
 
 ```text
-MVP lõi (bắt buộc trước)
+MVP sản phẩm (bắt buộc trước — viết như production)
   Phase 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7
+  (Phase 4: ưu tiên tools domain stock; builtin học thêm song song)
 
-Mở rộng agent
+Mở rộng agent (khi product cần)
   Phase 8 → 9 → 11 → 14 → 15 → 16(citation)
 
-Gateway production
+Gateway / multi-tenant / ops
   Phase 10 → 12 → 13 → 17 → 16(media/tts/browser)
 
 Optional / sau cùng
   Kafka parity (ews), mọi channel còn lại, ACP/Claude CLI providers, OTel
 ```
 
-Đến hết **Phase 7** bạn đã có xương sống giống cả 2.  
-Đến hết **Phase 17** = **full backend union**, không UI.
+Đến hết **Phase 7** = xương sống product dùng được (chat + session + LLM + loop + tools + workspace + stream/security cơ bản).  
+Đến hết **Phase 17** = **full backend union** (parity sâu), không UI — chỉ làm khi product/scale đòi hỏi.
 
 ---
 
@@ -1251,9 +1270,10 @@ Khi port sang Go, map tên pattern → idiom quen thuộc:
 
 ## 11. Bước tiếp theo
 
-1. Tạo repo Go mới, làm Phase 0–1 trong 1–2 buổi.  
-2. Dùng **§4 Checklist** làm backlog; mỗi mục ghi link PR/commit của bạn.  
-3. Mỗi phase chỉ mở đúng vài file tham chiếu ở **§5** — tránh đọc cả monorepo một lúc.  
-4. Mỗi phase, đọc dòng **Patterns học** + **§10** — viết interface trước, implement sau (để “cảm” Strategy/Repository/Registry).
+1. Phase 0–1 làm nền CLI/HTTP/middleware (đã/đang có) — giữ contract API.  
+2. Phase 2: session DB thật (SQLite/Postgres) + wire chat; **Done** = restart còn history.  
+3. Dùng **§4 Checklist** làm backlog product; mỗi mục ghi PR/commit — bỏ qua mục chưa cần ship.  
+4. Mỗi phase chỉ mở đúng vài file tham chiếu ở **§5** — tránh đọc cả monorepo một lúc.  
+5. Mỗi phase: **Patterns học** + **§10** — interface trước, impl sau; code viết để giữ, không viết để vứt.
 
-Chúc bạn build chắc: **backend đủ 2 thằng, UI để sau (hoặc không làm).** Học pattern song song với làm: xong Phase 7 bạn đã nắm gần hết xương sống architectural patterns của cả goclaw và ews-agent.
+Chúc bạn build chắc: **theo roadmap để không loạn, theo chuẩn product để không làm lại.** Xong Phase 7 là xương sống dùng được; union đủ 2 repo là đích dài, không phải điều kiện ra mắt.
