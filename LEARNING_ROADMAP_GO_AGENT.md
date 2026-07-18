@@ -12,7 +12,7 @@ Repo tham chiếu:
 | goclaw | `/Users/nghia.nguyen2/Public/projectResearch/goclaw` |
 | ews-agent | `/Users/nghia.nguyen2/Public/projectResearch/ews-agent` |
 
-**Nguyên tắc học:** mỗi phase = mini-project chạy được; tham chiếu file bên dưới rồi **viết lại bằng Go**, không copy-paste nguyên khối.
+**Nguyên tắc học:** mỗi phase = mini-project chạy được; tham chiếu file bên dưới rồi **viết lại bằng Go**, không copy-paste nguyên khối. Song song học **design patterns** của goclaw + ews-agent — xem dòng **Patterns học** ở mỗi phase và **§10**.
 
 ---
 
@@ -117,6 +117,8 @@ Bắt đầu SQLite/file → chuyển Postgres khi Phase 10.
 
 **Done:** `serve` + `/health` OK.
 
+**Patterns học:** Composition Root / Wiring · Configuration Object · Command (CLI subcommands)
+
 ---
 
 ### Phase 1 — HTTP Chat API (stub)
@@ -133,6 +135,8 @@ Bắt đầu SQLite/file → chuyển Postgres khi Phase 10.
 | Errors | `pkg/protocol/errors.go` | `ews_agent/errors/catalog.py`, `response.py` |
 
 **Done:** curl chat nhận `session_id` + reply stub.
+
+**Patterns học:** Middleware Chain · DTO / Schema · Error Catalog · Decorator (recover, request-id)
 
 ---
 
@@ -153,6 +157,8 @@ Bắt đầu SQLite/file → chuyển Postgres khi Phase 10.
 
 **Done:** restart process, history còn.
 
+**Patterns học:** Repository · Strategy (file/Redis/Postgres) · Protocol / Interface Segregation · Service Layer
+
 ---
 
 ### Phase 3 — LLM Provider(s)
@@ -171,6 +177,8 @@ Bắt đầu SQLite/file → chuyển Postgres khi Phase 10.
 | LLM logs | `internal/tracing/` | `ews_agent/llm/llm_logging.py`, `infra/llm_log.py` |
 
 **Done:** `/v1/chat` gọi model thật (chưa tools).
+
+**Patterns học:** Strategy (multi-provider) · Registry · Adapter (OpenAI-compat) · Decorator / Retry with backoff · Facade (LiteLLM-style router)
 
 ---
 
@@ -201,6 +209,8 @@ Bắt đầu SQLite/file → chuyển Postgres khi Phase 10.
 
 **Done:** model tự gọi tool và trả lời đúng.
 
+**Patterns học:** ReAct (think→act→observe) · Template Method (loop skeleton) · Command (tool call) · Registry (tools) · Chain of Responsibility / Middleware (prune, compact, limits)
+
 ---
 
 ### Phase 5 — Workspace / context files
@@ -220,6 +230,8 @@ Bắt đầu SQLite/file → chuyển Postgres khi Phase 10.
 | Docs | — | `docs/s3-workspace-backend.md`, `docs/architecture.md` |
 
 **Done:** sửa markdown → đổi hành vi agent, không sửa code.
+
+**Patterns học:** Builder (system prompt sections) · Context Object · Template Method (bootstrap seed files) · Path Jail / Capability-based access
 
 ---
 
@@ -255,6 +267,8 @@ Bắt đầu SQLite/file → chuyển Postgres khi Phase 10.
 
 **Done:** curl/SSE thấy tool + chunk realtime; optional WS `connect` + `chat.send`.
 
+**Patterns học:** Observer / Pub-Sub (progress events) · Adapter (SSE vs WS vs Kafka) · Envelope / Event Sourcing lite · RPC Method Router
+
 ---
 
 ### Phase 7 — Security đầy đủ (backend)
@@ -275,6 +289,8 @@ Bắt đầu SQLite/file → chuyển Postgres khi Phase 10.
 
 **Done:** test cố ý path escape / SSRF / injection bị chặn.
 
+**Patterns học:** Chain of Responsibility (auth→RBAC→injection→policy→sandbox→redact) · Policy Object / Guard · Decorator (scrub/redact) · Deny-by-default
+
 ---
 
 ### Phase 8 — MCP
@@ -294,6 +310,8 @@ Bắt đầu SQLite/file → chuyển Postgres khi Phase 10.
 | Docs | — | `docs/mcp_json_integration.md` |
 
 **Done:** 1 MCP server thật chạy trong agent loop.
+
+**Patterns học:** Bridge / Adapter (MCP protocol ↔ tool interface) · Proxy (lazy connect) · Plugin Registry · Grants / Capability tokens
 
 ---
 
@@ -324,6 +342,8 @@ Bắt đầu SQLite/file → chuyển Postgres khi Phase 10.
 
 **Done:** skill inject metadata; `/skills` hoạt động trên HTTP + CLI.
 
+**Patterns học:** Progressive Disclosure (skill metadata trước, body khi cần) · Plugin / Registry · Command (slash short-circuit) · Chain of Responsibility (ingress trước agent)
+
 ---
 
 ### Phase 10 — Multi-tenant, Auth, RBAC, Postgres, API keys
@@ -348,6 +368,8 @@ Bắt đầu SQLite/file → chuyển Postgres khi Phase 10.
 
 **Done:** 2 user không đọc được session/workspace của nhau.
 
+**Patterns học:** Multi-tenancy (row-level + path-scoped) · Gateway + AuthN/AuthZ · RBAC · Repository (agents/grants) · Secrets Vault pattern (encrypted provider keys)
+
 ---
 
 ### Phase 11 — Memory + Knowledge Graph
@@ -369,6 +391,8 @@ Bắt đầu SQLite/file → chuyển Postgres khi Phase 10.
 | Migrations | `migrations/000013_knowledge_graph.up.sql`, `000025_*.sql` | — |
 
 **Done:** agent nhớ được qua `memory_search`; optional KG query.
+
+**Patterns học:** Pipeline (extract→embed→store→retrieve) · Repository + Vector Search · Knowledge Graph (entity/relation) · Top-k Context Injection (không dump toàn bộ memory)
 
 ---
 
@@ -395,6 +419,8 @@ Bắt đầu SQLite/file → chuyển Postgres khi Phase 10.
 
 **Done:** nhắn Telegram = cùng agent loop với HTTP.
 
+**Patterns học:** Adapter (channel platforms) · Mediator / Message Bus · Normalize Inbound · Debounce + Deduplicate · Ports & Adapters (channel ≠ agent logic)
+
 ---
 
 ### Phase 13 — Scheduler lanes + Cron + Heartbeat
@@ -416,6 +442,8 @@ Bắt đầu SQLite/file → chuyển Postgres khi Phase 10.
 
 **Done:** concurrent runs có lane limit; cron/heartbeat chạy đúng.
 
+**Patterns học:** Scheduler Lanes · Worker Pool · Per-session FIFO Queue · Idempotency · Job / Cron pattern · Synthetic Request (cron → RunRequest chung)
+
 ---
 
 ### Phase 14 — Subagent + Team flow
@@ -435,6 +463,8 @@ Bắt đầu SQLite/file → chuyển Postgres khi Phase 10.
 
 **Done:** 1 parent hire được worker; có ít nhất 1 team/research path.
 
+**Patterns học:** Hierarchical / Composite Agent · Planner–Worker–Evaluator (Orchestrator) · Fan-out / Fan-in · Isolation Context (child session) · Cancellation Propagation
+
 ---
 
 ### Phase 15 — Sandbox execution
@@ -452,6 +482,8 @@ Bắt đầu SQLite/file → chuyển Postgres khi Phase 10.
 | Docs | — | `docs/design/SANDBOX_EXECUTION_DESIGN.md`, `docs/security/implementation/execution-sandbox.md` |
 
 **Done:** shell/python chạy trong container, không trên host trần.
+
+**Patterns học:** Sandbox / Isolation · Strategy (Docker / Monty / ECS) · Capability Dropping · Resource Quotas
 
 ---
 
@@ -471,6 +503,8 @@ Bắt đầu SQLite/file → chuyển Postgres khi Phase 10.
 | Citation | — | `ews_agent/citation/schemas.py`, `mapping.py`, `hooks.py`, `postprocessor.py`, `refs.py` |
 
 **Done:** upload ảnh phân tích được; TTS tool OK; citation gắn nguồn (nếu domain cần).
+
+**Patterns học:** Strategy (TTS providers) · Pipeline (citation post-process) · Media Handler · Tool Facade (browser)
 
 ---
 
@@ -492,6 +526,8 @@ Bắt đầu SQLite/file → chuyển Postgres khi Phase 10.
 | Hardening docs | `CLAUDE.md` checklist | `docs/operational-hardening-checklist.md` |
 
 **Done:** migrate/doctor ổn; có trace + metrics cơ bản; CLI cover ops chính.
+
+**Patterns học:** Observer (metrics/traces) · Cross-cutting Concerns (OTel) · Facade (CLI ops) · Health / Doctor checks · Schema Version Gate (migrate)
 
 ---
 
@@ -1081,10 +1117,143 @@ flowchart LR
 
 ---
 
-## 10. Bước tiếp theo
+## 10. Design Patterns học được từ goclaw + ews-agent
+
+Mỗi phase ở **§3** đã gắn dòng **Patterns học**. Mục này giải thích *pattern là gì*, *xuất hiện ở đâu trong 2 repo*, và *bạn nên học gì khi viết lại bằng Go*.
+
+### 10.1 Bản đồ nhanh: Phase → Pattern → Repo nguồn
+
+| Phase | Pattern chính | Chủ yếu từ | File / module điển hình |
+|-------|---------------|------------|-------------------------|
+| 0 | Composition Root, Config Object, Command (CLI) | cả 2 | goclaw `cmd/gateway*.go` · ews `api/__init__.py` `create_app` |
+| 1 | Middleware Chain, DTO, Error Catalog | cả 2 | goclaw `http/*`, `protocol/errors` · ews `errors/catalog.py` |
+| 2 | Repository, Strategy (store backends), Protocol | cả 2 | goclaw `store/*` · ews `SessionStoreProtocol`, `session_service` |
+| 3 | Strategy, Registry, Adapter, Retry Decorator, Facade | cả 2 | goclaw `providers/*` · ews `llm/orchestrator`, LiteLLM router |
+| 4 | **ReAct loop**, Template Method, Command (tools), Registry, Middleware | cả 2 | goclaw `agent/loop*`, `tools/registry` · ews `tool_calling_loop` |
+| 5 | Builder (prompt), Context Object, Bootstrap Template | cả 2 | goclaw `bootstrap/*`, `systemprompt*` · ews `system_prompt`, `request_context` |
+| 6 | Observer/Pub-Sub, Adapter (transport), RPC Router | cả 2 | goclaw `pkg/protocol`, WS methods · ews `progress/events`, SSE |
+| 7 | Chain of Responsibility, Policy/Guard, Deny-by-default | cả 2 | goclaw `input_guard`, `tools/policy` · ews `security/*` |
+| 8 | Bridge/Adapter (MCP), Proxy (lazy), Plugin Registry | cả 2 | goclaw `mcp/manager*` · ews `tools/mcp/*` |
+| 9 | Progressive Disclosure, Plugin, Command (slash), CoR ingress | cả 2 / slash=ews | goclaw `skills/*` · ews `skills/*`, `slash/*` |
+| 10 | Multi-tenancy, RBAC, Gateway Auth, Secrets Vault | cả 2 | goclaw `permissions`, `http/auth` · ews `api/auth`, `grants` |
+| 11 | Pipeline (memory), Vector Repository, KG | cả 2 / KG=goclaw | goclaw `memory`, `knowledgegraph` · ews `memory/*` |
+| 12 | Channel Adapter, Message Bus, Normalize, Debounce/Dedupe | cả 2 | goclaw `channels/*`, `bus/*` · ews `inbound_flow`, Kafka |
+| 13 | Lanes, Worker Pool, FIFO Queue, Idempotency, Cron Job | cả 2 | goclaw `scheduler`, `cron` · ews `runtime/scheduler`, `idempotency` |
+| 14 | Hierarchical Agent, Planner–Worker–Evaluator, Fan-out/in | cả 2 | goclaw `subagent*`, teams · ews `team_flow/*` |
+| 15 | Sandbox Isolation, Strategy (exec backends) | cả 2 | goclaw `sandbox/docker` · ews `execution/*` |
+| 16 | Strategy (TTS), Citation Pipeline, Media Handler | goclaw media/TTS · ews citation | goclaw `tts`, `media` · ews `citation/*` |
+| 17 | Observer (OTel), Cross-cutting, CLI Facade, Version Gate | cả 2 | goclaw `tracing`, `cmd/*` · ews `runtime/metrics`, CLI |
+
+### 10.2 Nhóm pattern theo “lớp kiến trúc” (học theo nhóm, không chỉ theo phase)
+
+#### A. Structural — tách biên giới hệ thống
+
+| Pattern | Ý nghĩa ngắn | Bạn thấy ở đâu |
+|---------|--------------|----------------|
+| **Ports & Adapters (Hexagonal)** | Channel/HTTP/WS chỉ là cổng; lõi = agent loop | §9.1, §9.7 — cả 2 |
+| **Adapter** | Bọc API ngoài thành interface nội bộ | Providers, MCP, Telegram/Slack, OpenAI-compat |
+| **Bridge** | Hai hierarchy độc lập (protocol MCP ↔ tool API) | Phase 8 MCP |
+| **Facade** | Một mặt đơn giản che phức tạp | LiteLLM-style router, CLI `doctor`/`onboard` |
+| **Proxy** | Lazy connect / cache connection MCP | Phase 8 |
+| **Registry / Plugin** | Đăng ký tool/provider/skill theo tên | Phase 3, 4, 8, 9 |
+
+#### B. Behavioral — điều khiển luồng runtime
+
+| Pattern | Ý nghĩa ngắn | Bạn thấy ở đâu |
+|---------|--------------|----------------|
+| **ReAct (think→act→observe)** | Vòng lặp agent: LLM → tool → quan sát → lặp | Phase 4 — **pattern lõi nhất** |
+| **Template Method** | Skeleton loop cố định, bước con thay được | `loop.go` / `single_loop_runner` |
+| **Command** | Mỗi tool call = lệnh có schema + execute | Tool registry |
+| **Chain of Responsibility** | Pipeline bảo vệ / middleware / slash trước agent | Phase 1, 7, 9 |
+| **Middleware / Decorator** | Bọc thêm hành vi (retry, scrub, recover, prune) | Providers, tools, agent middleware |
+| **Observer / Pub-Sub** | Emit progress events cho nhiều subscriber | SSE, WS, Kafka |
+| **Mediator / Bus** | Inbound messages hội tụ 1 chỗ trước scheduler | Phase 12 |
+| **Strategy** | Đổi thuật toán cùng interface | Store backend, provider, sandbox, TTS |
+| **Builder** | Ghép system prompt theo section | Phase 5 |
+| **Orchestrator (Planner–Worker–Evaluator)** | Điều phối multi-agent research | Phase 14 (ews team_flow; goclaw teams) |
+
+#### C. Data & concurrency
+
+| Pattern | Ý nghĩa ngắn | Bạn thấy ở đâu |
+|---------|--------------|----------------|
+| **Repository** | Ẩn SQL/file/S3 sau interface | Session, memory, grants |
+| **Protocol / ISP** | Interface nhỏ theo capability | `SessionStoreProtocol`, store interfaces |
+| **Context Object** | Gói tenant/user/agent/session/policy một lần | `request_context`, resolver |
+| **Idempotency** | Retry không tạo run trùng | Phase 13 |
+| **Worker Pool + Lanes** | Giới hạn concurrency theo loại việc | Scheduler |
+| **Per-session FIFO** | Cùng session không race history | Scheduler |
+| **Fan-out / Fan-in** | Spawn nhiều subagent rồi tổng hợp | Phase 14 |
+| **Pipeline** | Chuỗi bước cố định (memory extract, citation) | Phase 11, 16 |
+
+#### D. Security & tenancy (pattern “production”)
+
+| Pattern | Ý nghĩa ngắn | Bạn thấy ở đâu |
+|---------|--------------|----------------|
+| **Deny-by-default Policy** | Không có grant = không chạy | Tool policy, MCP/skills grants |
+| **Guard / Policy Object** | Luật tách khỏi business logic | `security/policy`, `tools/policy` |
+| **Sandbox Isolation** | Side-effect chạy ngoài process host | Phase 15 |
+| **Multi-tenant scoping** | Mọi key/path/row mang tenant | Phase 10, §9.13 |
+| **Secrets Vault** | Encrypt provider keys at rest | Phase 10 |
+| **Progressive Disclosure** | Chỉ lộ skill body khi cần → giảm prompt injection surface | Phase 9 |
+
+### 10.3 Pattern “signature” của từng repo (học đối chiếu)
+
+Học **cả 2** vì mỗi bên nhấn mạnh khác nhau — union roadmap = học đủ bộ.
+
+| Chủ đề | goclaw dạy rõ | ews-agent dạy rõ |
+|--------|---------------|------------------|
+| Ingress | WebSocket RPC + method router | HTTP + SSE + Kafka progress |
+| Agent lõi | Loop Go thuần, toolloop, compact | `tool_calling_loop` + middleware limits |
+| Providers | Nhiều adapter native (OpenAI/Anthropic/…) | Facade qua LiteLLM config |
+| Workspace | Bootstrap markdown + DB agent context | MAIN/AGENT/SOUL + file/db/s3 backends |
+| Multi-agent | Subagent tools + team task board | Planner→Workers→Evaluator research flow |
+| Security | Input guard + tool policy + exec approval | POLICY + injection guard + redaction layers |
+| Ops | CLI rộng, upgrade/migrate gate, i18n | Metrics timings, operational checklists |
+| Memory | pgvector + **knowledge graph** | memory manager + providers (file/S3/mem0) |
+| Channels | Nhiều platform adapters + bus | Inbound flow + Kafka worker |
+
+### 10.4 Thứ tự học pattern (khuyến nghị)
+
+```text
+Nền Go/API
+  Composition Root → Middleware → Repository → Strategy
+
+Lõi agent (quan trọng nhất)
+  Registry → Command(tool) → ReAct loop → Builder(prompt) → Middleware(prune)
+
+Production surface
+  Observer(events) → Adapter(transport) → Chain(security) → Multi-tenant
+
+Mở rộng
+  Bridge(MCP) → Plugin(skills) → Bus(channels) → Scheduler/Idempotency
+  → Hierarchical agents → Sandbox → Pipeline(memory/citation) → OTel
+```
+
+**Cách học hiệu quả:** mỗi phase, trước khi code — đọc 1–2 file ở **§5**, viết ra giấy: *interface nào? ai implement? ai gọi?* Đó chính là bạn đang “nhìn thấy” pattern, không chỉ nhớ tên.
+
+### 10.5 Cheat-sheet Go idioms ≈ pattern GoF
+
+Khi port sang Go, map tên pattern → idiom quen thuộc:
+
+| Pattern | Idiom Go thường dùng |
+|---------|----------------------|
+| Strategy / Adapter | `interface` + nhiều `struct` implement |
+| Registry | `map[string]Tool` + `Register` |
+| Middleware / Decorator | `func(http.Handler) http.Handler` hoặc wrapper `Provider` |
+| Repository | `type Store interface { … }` + `pg.Store` |
+| Observer | channel fan-out / callback `Emit(event)` |
+| Context Object | `context.Context` + typed `RequestContext` struct |
+| Worker Pool | semaphore (`chan struct{}`) hoặc `errgroup` + limit |
+| Idempotency | dedupe table / Redis key + status machine |
+| Composition Root | `cmd/gateway_setup.go` wire dependencies (manual DI) |
+
+---
+
+## 11. Bước tiếp theo
 
 1. Tạo repo Go mới, làm Phase 0–1 trong 1–2 buổi.  
 2. Dùng **§4 Checklist** làm backlog; mỗi mục ghi link PR/commit của bạn.  
-3. Mỗi phase chỉ mở đúng vài file tham chiếu ở **§5** — tránh đọc cả monorepo một lúc.
+3. Mỗi phase chỉ mở đúng vài file tham chiếu ở **§5** — tránh đọc cả monorepo một lúc.  
+4. Mỗi phase, đọc dòng **Patterns học** + **§10** — viết interface trước, implement sau (để “cảm” Strategy/Repository/Registry).
 
-Chúc bạn build chắc: **backend đủ 2 thằng, UI để sau (hoặc không làm).**
+Chúc bạn build chắc: **backend đủ 2 thằng, UI để sau (hoặc không làm).** Học pattern song song với làm: xong Phase 7 bạn đã nắm gần hết xương sống architectural patterns của cả goclaw và ews-agent.
