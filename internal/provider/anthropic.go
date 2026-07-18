@@ -56,8 +56,12 @@ func NewAnthropic(cfg AnthropicConfig) *Anthropic {
 
 func (p *Anthropic) Name() string         { return p.name }
 func (p *Anthropic) DefaultModel() string { return p.defaultModel }
+func (p *Anthropic) SupportsTools() bool  { return false }
 
 func (p *Anthropic) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
+	if len(req.Tools) > 0 {
+		return nil, fmt.Errorf("%s: tool calling not implemented yet; use an OpenAI-compatible provider (llmgate/openai/…)", p.name)
+	}
 	model := req.Model
 	if model == "" {
 		model = p.defaultModel

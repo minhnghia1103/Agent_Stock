@@ -23,6 +23,8 @@ type ChatResponse struct {
 	MessageCount int             `json:"message_count"`
 	Model        string          `json:"model,omitempty"`
 	Usage        *provider.Usage `json:"usage,omitempty"`
+	Iterations   int             `json:"iterations,omitempty"`
+	ToolCalls    int             `json:"tool_calls,omitempty"`
 }
 
 func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
@@ -69,6 +71,8 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		"session_id", result.SessionID,
 		"message_count", result.MessageCount,
 		"model", result.Model,
+		"iterations", result.Iterations,
+		"tool_calls", result.ToolCalls,
 	)
 
 	writeJSON(w, http.StatusOK, ChatResponse{
@@ -78,5 +82,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		MessageCount: result.MessageCount,
 		Model:        result.Model,
 		Usage:        result.Usage,
+		Iterations:   result.Iterations,
+		ToolCalls:    result.ToolCalls,
 	})
 }

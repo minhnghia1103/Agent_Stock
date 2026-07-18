@@ -53,6 +53,7 @@ func NewOpenAICompat(cfg OpenAICompatConfig) *OpenAICompat {
 
 func (p *OpenAICompat) Name() string         { return p.name }
 func (p *OpenAICompat) DefaultModel() string { return p.defaultModel }
+func (p *OpenAICompat) SupportsTools() bool  { return true }
 
 func (p *OpenAICompat) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
 	model := req.Model
@@ -66,6 +67,9 @@ func (p *OpenAICompat) Chat(ctx context.Context, req ChatRequest) (*ChatResponse
 	body := map[string]any{
 		"model":    model,
 		"messages": toOpenAIMessages(req.Messages),
+	}
+	if len(req.Tools) > 0 {
+		body["tools"] = toOpenAITools(req.Tools)
 	}
 
 	return RetryDo(ctx, p.retry, func() (*ChatResponse, error) {
@@ -111,10 +115,18 @@ func (p *OpenAICompat) doChat(ctx context.Context, body map[string]any, model st
 		return nil, fmt.Errorf("%s: empty choices", p.name)
 	}
 
+	choice := parsed.Choices[0]
 	out := &ChatResponse{
-		Content:      parsed.Choices[0].Message.Content,
-		FinishReason: parsed.Choices[0].FinishReason,
+		Content:      choice.Message.Content,
+		FinishReason: choice.FinishReason,
 		Model:        firstNonEmpty(parsed.Model, model),
+	}
+	for _, tc := range choice.Message.ToolCalls {
+		out.ToolCalls = append(out.ToolCalls, ToolCall{
+			ID:        tc.ID,
+			Name:      tc.Function.Name,
+			Arguments: tc.Function.Arguments,
+		})
 	}
 	if parsed.Usage != nil {
 		out.Usage = &Usage{
@@ -131,8 +143,16 @@ type openAIResponse struct {
 	Choices []struct {
 		FinishReason string `json:"finish_reason"`
 		Message      struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
+			Role      string `json:"role"`
+			Content   string `json:"content"`
+			ToolCalls []struct {
+				ID       string `json:"id"`
+				Type     string `json:"type"`
+				Function struct {
+					Name      string `json:"name"`
+					Arguments string `json:"arguments"`
+				} `json:"function"`
+			} `json:"tool_calls"`
 		} `json:"message"`
 	} `json:"choices"`
 	Usage *struct {
@@ -142,12 +162,63 @@ type openAIResponse struct {
 	} `json:"usage"`
 }
 
-func toOpenAIMessages(msgs []Message) []map[string]string {
-	out := make([]map[string]string, 0, len(msgs))
+func toOpenAIMessages(msgs []Message) []map[string]any {
+	out := make([]map[string]any, 0, len(msgs))
 	for _, m := range msgs {
-		out = append(out, map[string]string{
-			"role":    m.Role,
-			"content": m.Content,
+		item := map[string]any{
+			"role": m.Role,
+		}
+		switch m.Role {
+		case RoleAssistant:
+			if len(m.ToolCalls) > 0 {
+				calls := make([]map[string]any, 0, len(m.ToolCalls))
+				for _, tc := range m.ToolCalls {
+					calls = append(calls, map[string]any{
+						"id":   tc.ID,
+						"type": "function",
+						"function": map[string]any{
+							"name":      tc.Name,
+							"arguments": tc.Arguments,
+						},
+					})
+				}
+				item["tool_calls"] = calls
+				if m.Content != "" {
+					item["content"] = m.Content
+				} else {
+					item["content"] = nil
+				}
+			} else {
+				item["content"] = m.Content
+			}
+		case RoleTool:
+			item["content"] = m.Content
+			item["tool_call_id"] = m.ToolCallID
+			if m.Name != "" {
+				item["name"] = m.Name
+			}
+		default:
+			item["content"] = m.Content
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func toOpenAITools(defs []ToolDefinition) []map[string]any {
+	out := make([]map[string]any, 0, len(defs))
+	for _, d := range defs {
+		params := d.Parameters
+		if params == nil {
+			params = map[string]any{"type": "object", "properties": map[string]any{}}
+		}
+		out = append(out, map[string]any{
+			"type": "function",
+			"function": map[string]any{
+				"name":        d.Name,
+				"description": d.Description,
+				"parameters":  params,
+			},
 		})
 	}
 	return out

@@ -63,6 +63,14 @@ func applyEnv(cfg *Config) {
 	if v := os.Getenv("AGENT_SYSTEM_PROMPT"); v != "" {
 		cfg.SystemPrompt = v
 	}
+	if v := os.Getenv("AGENT_WORKSPACE_PATH"); v != "" {
+		cfg.WorkspacePath = v
+	}
+	if v := os.Getenv("AGENT_MAX_TOOL_ITERATIONS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.MaxToolIterations = n
+		}
+	}
 }
 
 func (c *Config) validate() error {

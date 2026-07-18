@@ -8,22 +8,28 @@ import (
 
 	"github.com/google/uuid"
 
+	"agent_stock/internal/agent"
 	"agent_stock/internal/provider"
 	"agent_stock/internal/store"
+	"agent_stock/internal/tools"
 )
 
-// Service orchestrates session persistence + LLM chat turns.
+// Service orchestrates session persistence + agent loop turns.
 type Service struct {
 	sessions     store.SessionStore
 	llm          provider.Provider
+	tools        *tools.Registry
 	systemPrompt string
+	maxIter      int
 }
 
-func NewService(sessions store.SessionStore, llm provider.Provider, systemPrompt string) *Service {
+func NewService(sessions store.SessionStore, llm provider.Provider, toolReg *tools.Registry, systemPrompt string, maxIter int) *Service {
 	return &Service{
 		sessions:     sessions,
 		llm:          llm,
+		tools:        toolReg,
 		systemPrompt: systemPrompt,
+		maxIter:      maxIter,
 	}
 }
 
@@ -34,9 +40,11 @@ type TurnResult struct {
 	MessageCount int
 	Model        string
 	Usage        *provider.Usage
+	Iterations   int
+	ToolCalls    int
 }
 
-// ChatTurn loads history, calls the LLM, persists user+assistant messages.
+// ChatTurn loads history, runs agent loop (tools), persists user+assistant.
 func (s *Service) ChatTurn(ctx context.Context, sessionID, message string) (*TurnResult, error) {
 	if message == "" {
 		return nil, fmt.Errorf("message is required")
@@ -58,27 +66,30 @@ func (s *Service) ChatTurn(ctx context.Context, sessionID, message string) (*Tur
 	}
 
 	msgs := make([]provider.Message, 0, len(history)+2)
-	if s.systemPrompt != "" {
-		msgs = append(msgs, provider.Message{Role: provider.RoleSystem, Content: s.systemPrompt})
+	prompt := s.systemPrompt
+	if prompt == "" {
+		prompt = "You are a helpful stock research assistant. Use tools when they improve accuracy."
 	}
+	msgs = append(msgs, provider.Message{Role: provider.RoleSystem, Content: prompt})
 	for _, m := range history {
 		msgs = append(msgs, provider.Message{Role: m.Role, Content: m.Content})
 	}
 	msgs = append(msgs, provider.Message{Role: provider.RoleUser, Content: message})
 
-	resp, err := s.llm.Chat(ctx, provider.ChatRequest{Messages: msgs})
-	if err != nil {
-		return nil, fmt.Errorf("llm chat: %w", err)
+	loop := &agent.Loop{
+		LLM:           s.llm,
+		Tools:         s.tools,
+		MaxIterations: s.maxIter,
 	}
-	reply := resp.Content
-	if reply == "" {
-		return nil, fmt.Errorf("llm returned empty content")
+	run, err := loop.Run(ctx, msgs)
+	if err != nil {
+		return nil, err
 	}
 
 	now := time.Now().UTC()
 	if err := s.sessions.AppendMessages(ctx, sessionID,
 		store.Message{Role: store.RoleUser, Content: message, CreatedAt: now},
-		store.Message{Role: store.RoleAssistant, Content: reply, CreatedAt: now},
+		store.Message{Role: store.RoleAssistant, Content: run.Content, CreatedAt: now},
 	); err != nil {
 		return nil, err
 	}
@@ -88,18 +99,22 @@ func (s *Service) ChatTurn(ctx context.Context, sessionID, message string) (*Tur
 		return nil, err
 	}
 
-	slog.Info("llm chat ok",
+	slog.Info("agent turn ok",
 		"provider", s.llm.Name(),
-		"model", resp.Model,
+		"model", run.Model,
 		"session_id", sessionID,
 		"message_count", n,
+		"iterations", run.Iterations,
+		"tool_calls", run.ToolCallsRan,
 	)
 
 	return &TurnResult{
 		SessionID:    sessionID,
-		Reply:        reply,
+		Reply:        run.Content,
 		MessageCount: n,
-		Model:        resp.Model,
-		Usage:        resp.Usage,
+		Model:        run.Model,
+		Usage:        run.Usage,
+		Iterations:   run.Iterations,
+		ToolCalls:    run.ToolCallsRan,
 	}, nil
 }

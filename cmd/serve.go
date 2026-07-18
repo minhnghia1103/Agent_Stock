@@ -18,6 +18,7 @@ import (
 	"agent_stock/internal/provider"
 	"agent_stock/internal/session"
 	"agent_stock/internal/store/sqlite"
+	"agent_stock/internal/tools"
 )
 
 func serveCmd() *cobra.Command {
@@ -62,11 +63,15 @@ func runServe() {
 		os.Exit(1)
 	}
 
-	reg := provider.NewRegistry()
-	reg.Register(llm)
-	_ = reg.SetDefault(llm.Name())
+	ws, err := tools.NewWorkspace(cfg.WorkspacePath)
+	if err != nil {
+		slog.Error("failed to init workspace", "error", err, "path", cfg.WorkspacePath)
+		os.Exit(1)
+	}
+	toolReg := tools.NewRegistry()
+	tools.RegisterBuiltins(toolReg, ws)
 
-	sessionSvc := session.NewService(sessionStore, llm, cfg.SystemPrompt)
+	sessionSvc := session.NewService(sessionStore, llm, toolReg, cfg.SystemPrompt, cfg.MaxToolIterations)
 	srv := httpserver.New(cfg, Version, sessionSvc)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -83,8 +88,11 @@ func runServe() {
 		slog.Info("listening",
 			"addr", cfg.Addr(),
 			"database", cfg.DatabasePath,
+			"workspace", ws.Root(),
 			"llm_provider", llm.Name(),
 			"llm_model", llm.DefaultModel(),
+			"tools", toolReg.Names(),
+			"tools_enabled", provider.SupportsTools(llm),
 		)
 		errCh <- httpServer.ListenAndServe()
 	}()

@@ -15,6 +15,9 @@ type Config struct {
 	LLMTimeoutSec int
 	LLMMaxRetries int
 	SystemPrompt  string
+
+	WorkspacePath     string
+	MaxToolIterations int
 }
 
 // Addr returns host:port for net/http.
