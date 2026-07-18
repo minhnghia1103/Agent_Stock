@@ -7,6 +7,14 @@ type Config struct {
 	Host         string
 	Port         int
 	DatabasePath string
+
+	LLMProvider   string
+	LLMBaseURL    string
+	LLMAPIKey     string
+	LLMModel      string
+	LLMTimeoutSec int
+	LLMMaxRetries int
+	SystemPrompt  string
 }
 
 // Addr returns host:port for net/http.

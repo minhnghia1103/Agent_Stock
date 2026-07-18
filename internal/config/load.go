@@ -17,7 +17,6 @@ func Load() (*Config, error) {
 	if envFile == "" {
 		envFile = ".env"
 	}
-	// Missing .env is OK — defaults + exported env still work.
 	_ = godotenv.Load(envFile)
 
 	applyEnv(&cfg)
@@ -39,6 +38,31 @@ func applyEnv(cfg *Config) {
 	if v := os.Getenv("AGENT_DATABASE_PATH"); v != "" {
 		cfg.DatabasePath = v
 	}
+	if v := os.Getenv("AGENT_LLM_PROVIDER"); v != "" {
+		cfg.LLMProvider = v
+	}
+	if v := os.Getenv("AGENT_LLM_BASE_URL"); v != "" {
+		cfg.LLMBaseURL = v
+	}
+	if v := os.Getenv("AGENT_LLM_API_KEY"); v != "" {
+		cfg.LLMAPIKey = v
+	}
+	if v := os.Getenv("AGENT_LLM_MODEL"); v != "" {
+		cfg.LLMModel = v
+	}
+	if v := os.Getenv("AGENT_LLM_TIMEOUT_SEC"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.LLMTimeoutSec = n
+		}
+	}
+	if v := os.Getenv("AGENT_LLM_MAX_RETRIES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.LLMMaxRetries = n
+		}
+	}
+	if v := os.Getenv("AGENT_SYSTEM_PROMPT"); v != "" {
+		cfg.SystemPrompt = v
+	}
 }
 
 func (c *Config) validate() error {
@@ -47,6 +71,9 @@ func (c *Config) validate() error {
 	}
 	if strings.TrimSpace(c.DatabasePath) == "" {
 		return fmt.Errorf("database_path is required")
+	}
+	if strings.TrimSpace(c.LLMProvider) == "" {
+		return fmt.Errorf("AGENT_LLM_PROVIDER is required")
 	}
 	return nil
 }

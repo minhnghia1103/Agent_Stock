@@ -2,8 +2,11 @@ package http
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
+
+	"agent_stock/internal/provider"
 )
 
 // ChatRequest is the body for POST /v1/chat.
@@ -12,12 +15,14 @@ type ChatRequest struct {
 	SessionID string `json:"session_id,omitempty"`
 }
 
-// ChatResponse is the chat reply (Phase 2: stub text, persisted history).
+// ChatResponse is the chat reply.
 type ChatResponse struct {
-	SessionID    string `json:"session_id"`
-	Reply        string `json:"reply"`
-	RequestID    string `json:"request_id"`
-	MessageCount int    `json:"message_count"`
+	SessionID    string          `json:"session_id"`
+	Reply        string          `json:"reply"`
+	RequestID    string          `json:"request_id"`
+	MessageCount int             `json:"message_count"`
+	Model        string          `json:"model,omitempty"`
+	Usage        *provider.Usage `json:"usage,omitempty"`
 }
 
 func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
@@ -46,7 +51,16 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			"session_id", req.SessionID,
 			"error", err,
 		)
-		writeError(w, r, http.StatusInternalServerError, "internal_error", "failed to persist chat turn")
+		status := http.StatusInternalServerError
+		typ := "internal_error"
+		msg := "chat turn failed"
+		var httpErr *provider.HTTPError
+		if errors.As(err, &httpErr) {
+			status = http.StatusBadGateway
+			typ = "llm_error"
+			msg = httpErr.Error()
+		}
+		writeError(w, r, status, typ, msg)
 		return
 	}
 
@@ -54,6 +68,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		"request_id", reqID,
 		"session_id", result.SessionID,
 		"message_count", result.MessageCount,
+		"model", result.Model,
 	)
 
 	writeJSON(w, http.StatusOK, ChatResponse{
@@ -61,5 +76,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		Reply:        result.Reply,
 		RequestID:    reqID,
 		MessageCount: result.MessageCount,
+		Model:        result.Model,
+		Usage:        result.Usage,
 	})
 }

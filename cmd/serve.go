@@ -15,6 +15,7 @@ import (
 
 	"agent_stock/internal/config"
 	httpserver "agent_stock/internal/http"
+	"agent_stock/internal/provider"
 	"agent_stock/internal/session"
 	"agent_stock/internal/store/sqlite"
 )
@@ -48,7 +49,24 @@ func runServe() {
 		}
 	}()
 
-	sessionSvc := session.NewService(sessionStore)
+	llm, err := provider.NewFromConfig(provider.BuildConfig{
+		Name:         cfg.LLMProvider,
+		APIKey:       cfg.LLMAPIKey,
+		BaseURL:      cfg.LLMBaseURL,
+		DefaultModel: cfg.LLMModel,
+		Timeout:      time.Duration(cfg.LLMTimeoutSec) * time.Second,
+		MaxRetries:   cfg.LLMMaxRetries,
+	})
+	if err != nil {
+		slog.Error("failed to init llm provider", "error", err)
+		os.Exit(1)
+	}
+
+	reg := provider.NewRegistry()
+	reg.Register(llm)
+	_ = reg.SetDefault(llm.Name())
+
+	sessionSvc := session.NewService(sessionStore, llm, cfg.SystemPrompt)
 	srv := httpserver.New(cfg, Version, sessionSvc)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -65,6 +83,8 @@ func runServe() {
 		slog.Info("listening",
 			"addr", cfg.Addr(),
 			"database", cfg.DatabasePath,
+			"llm_provider", llm.Name(),
+			"llm_model", llm.DefaultModel(),
 		)
 		errCh <- httpServer.ListenAndServe()
 	}()
