@@ -2,6 +2,7 @@ package security_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"agent_stock/internal/security"
@@ -86,19 +87,7 @@ func TestRedactSecrets(t *testing.T) {
 	if out == in {
 		t.Fatal("expected redaction")
 	}
-	if contains(out, "sk-abcdefghijklmnopqrstuvwxyz") {
+	if strings.Contains(out, "sk-abcdefghijklmnopqrstuvwxyz") {
 		t.Fatalf("secret leaked: %s", out)
 	}
-}
-
-func contains(s, sub string) bool {
-	return len(s) >= len(sub) && (s == sub || len(sub) == 0 ||
-		(func() bool {
-			for i := 0; i+len(sub) <= len(s); i++ {
-				if s[i:i+len(sub)] == sub {
-					return true
-				}
-			}
-			return false
-		})())
 }
