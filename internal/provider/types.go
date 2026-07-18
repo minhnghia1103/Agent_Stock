@@ -56,11 +56,22 @@ type ChatResponse struct {
 	Usage        *Usage
 }
 
+// StreamChunk is a partial text delta during streaming.
+type StreamChunk struct {
+	Content string
+}
+
 // Provider is the Strategy interface for LLM backends.
 type Provider interface {
 	Name() string
 	DefaultModel() string
 	Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error)
+}
+
+// StreamCapable providers can stream assistant text deltas.
+type StreamCapable interface {
+	Provider
+	ChatStream(ctx context.Context, req ChatRequest, onChunk func(StreamChunk)) (*ChatResponse, error)
 }
 
 // ToolCapable providers can accept Tools in ChatRequest.
@@ -75,4 +86,10 @@ func SupportsTools(p Provider) bool {
 		return tc.SupportsTools()
 	}
 	return false
+}
+
+// AsStreamer returns StreamCapable if available.
+func AsStreamer(p Provider) (StreamCapable, bool) {
+	s, ok := p.(StreamCapable)
+	return s, ok
 }

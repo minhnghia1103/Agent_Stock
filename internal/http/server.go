@@ -25,6 +25,8 @@ func New(cfg *config.Config, version string, sessions *session.Service) *Server 
 	}
 	s.mux.HandleFunc("GET /health", s.handleHealth)
 	s.mux.HandleFunc("POST /v1/chat", s.handleChat)
+	s.mux.HandleFunc("POST /v1/chat/stream", s.handleChatStream)
+	s.mux.HandleFunc("GET /ws", s.handleWS)
 	return s
 }
 

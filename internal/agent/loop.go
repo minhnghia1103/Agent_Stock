@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"agent_stock/internal/progress"
 	"agent_stock/internal/provider"
 	"agent_stock/internal/tools"
 )
@@ -14,6 +15,7 @@ type Loop struct {
 	LLM           provider.Provider
 	Tools         *tools.Registry
 	MaxIterations int
+	OnEvent       progress.Emitter
 }
 
 // RunResult is the final assistant answer after the loop.
@@ -46,11 +48,12 @@ func (l *Loop) Run(ctx context.Context, msgs []provider.Message) (*RunResult, er
 	toolCallsRan := 0
 
 	for i := 0; i < maxIter; i++ {
-		resp, err := l.LLM.Chat(ctx, provider.ChatRequest{
+		resp, err := l.chatOnce(ctx, provider.ChatRequest{
 			Messages: working,
 			Tools:    toolDefs,
 		})
 		if err != nil {
+			progress.Emit(l.OnEvent, progress.EventError, map[string]any{"message": err.Error()})
 			return nil, fmt.Errorf("llm chat (iter %d): %w", i+1, err)
 		}
 		model = resp.Model
@@ -58,7 +61,9 @@ func (l *Loop) Run(ctx context.Context, msgs []provider.Message) (*RunResult, er
 
 		if len(resp.ToolCalls) == 0 {
 			if resp.Content == "" {
-				return nil, fmt.Errorf("llm returned empty content")
+				err := fmt.Errorf("llm returned empty content")
+				progress.Emit(l.OnEvent, progress.EventError, map[string]any{"message": err.Error()})
+				return nil, err
 			}
 			return &RunResult{
 				Content:      resp.Content,
@@ -85,12 +90,23 @@ func (l *Loop) Run(ctx context.Context, msgs []provider.Message) (*RunResult, er
 				"tool", tc.Name,
 				"id", tc.ID,
 			)
+			progress.Emit(l.OnEvent, progress.EventToolCall, map[string]any{
+				"id":        tc.ID,
+				"name":      tc.Name,
+				"arguments": tc.Arguments,
+			})
 			result := l.Tools.Execute(ctx, tc.Name, tc.Arguments)
 			toolCallsRan++
 			content := result.Content
 			if result.IsError {
 				content = "ERROR: " + content
 			}
+			progress.Emit(l.OnEvent, progress.EventToolResult, map[string]any{
+				"id":       tc.ID,
+				"name":     tc.Name,
+				"content":  truncate(content, 2000),
+				"is_error": result.IsError,
+			})
 			working = append(working, provider.Message{
 				Role:       provider.RoleTool,
 				Content:    content,
@@ -100,7 +116,28 @@ func (l *Loop) Run(ctx context.Context, msgs []provider.Message) (*RunResult, er
 		}
 	}
 
-	return nil, fmt.Errorf("max tool iterations reached (%d)", maxIter)
+	err := fmt.Errorf("max tool iterations reached (%d)", maxIter)
+	progress.Emit(l.OnEvent, progress.EventError, map[string]any{"message": err.Error()})
+	return nil, err
+}
+
+func (l *Loop) chatOnce(ctx context.Context, req provider.ChatRequest) (*provider.ChatResponse, error) {
+	if streamer, ok := provider.AsStreamer(l.LLM); ok {
+		return streamer.ChatStream(ctx, req, func(c provider.StreamChunk) {
+			if c.Content == "" {
+				return
+			}
+			progress.Emit(l.OnEvent, progress.EventChunk, map[string]any{"text": c.Content})
+		})
+	}
+	resp, err := l.LLM.Chat(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Content != "" && len(resp.ToolCalls) == 0 {
+		progress.Emit(l.OnEvent, progress.EventChunk, map[string]any{"text": resp.Content})
+	}
+	return resp, nil
 }
 
 func mergeUsage(a, b *provider.Usage) *provider.Usage {
@@ -119,4 +156,11 @@ func mergeUsage(a, b *provider.Usage) *provider.Usage {
 		out.TotalTokens += b.TotalTokens
 	}
 	return out
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }

@@ -10,6 +10,7 @@ import (
 
 	"agent_stock/internal/agent"
 	"agent_stock/internal/bootstrap"
+	"agent_stock/internal/progress"
 	"agent_stock/internal/provider"
 	"agent_stock/internal/store"
 	"agent_stock/internal/tools"
@@ -54,9 +55,13 @@ type TurnResult struct {
 	ToolCalls    int
 }
 
-// ChatTurn loads history, builds system prompt from workspace markdown,
-// runs agent loop, persists user+assistant.
+// ChatTurn runs a non-streaming chat turn.
 func (s *Service) ChatTurn(ctx context.Context, sessionID, message string) (*TurnResult, error) {
+	return s.ChatTurnWithEvents(ctx, sessionID, message, nil)
+}
+
+// ChatTurnWithEvents runs a chat turn and emits progress events (SSE / WS).
+func (s *Service) ChatTurnWithEvents(ctx context.Context, sessionID, message string, emit progress.Emitter) (*TurnResult, error) {
 	if message == "" {
 		return nil, fmt.Errorf("message is required")
 	}
@@ -76,7 +81,6 @@ func (s *Service) ChatTurn(ctx context.Context, sessionID, message string) (*Tur
 		return nil, err
 	}
 
-	// Reload markdown each turn so edits apply without restart (Phase 5 Done).
 	files := bootstrap.Load(s.workspaceDir)
 	prompt := bootstrap.BuildSystemPrompt(s.basePrompt, files)
 
@@ -87,10 +91,15 @@ func (s *Service) ChatTurn(ctx context.Context, sessionID, message string) (*Tur
 	}
 	msgs = append(msgs, provider.Message{Role: provider.RoleUser, Content: message})
 
+	progress.Emit(emit, progress.EventRunStarted, map[string]any{
+		"session_id": sessionID,
+	})
+
 	loop := &agent.Loop{
 		LLM:           s.llm,
 		Tools:         s.tools,
 		MaxIterations: s.maxIter,
+		OnEvent:       emit,
 	}
 	run, err := loop.Run(ctx, msgs)
 	if err != nil {
@@ -110,6 +119,29 @@ func (s *Service) ChatTurn(ctx context.Context, sessionID, message string) (*Tur
 		return nil, err
 	}
 
+	result := &TurnResult{
+		SessionID:    sessionID,
+		Reply:        run.Content,
+		MessageCount: n,
+		Model:        run.Model,
+		Usage:        run.Usage,
+		Iterations:   run.Iterations,
+		ToolCalls:    run.ToolCallsRan,
+	}
+
+	payload := map[string]any{
+		"session_id":    result.SessionID,
+		"reply":         result.Reply,
+		"message_count": result.MessageCount,
+		"model":         result.Model,
+		"iterations":    result.Iterations,
+		"tool_calls":    result.ToolCalls,
+	}
+	if result.Usage != nil {
+		payload["usage"] = result.Usage
+	}
+	progress.Emit(emit, progress.EventRunCompleted, payload)
+
 	slog.Info("agent turn ok",
 		"provider", s.llm.Name(),
 		"model", run.Model,
@@ -120,13 +152,5 @@ func (s *Service) ChatTurn(ctx context.Context, sessionID, message string) (*Tur
 		"bootstrap", bootstrap.PresentNames(files),
 	)
 
-	return &TurnResult{
-		SessionID:    sessionID,
-		Reply:        run.Content,
-		MessageCount: n,
-		Model:        run.Model,
-		Usage:        run.Usage,
-		Iterations:   run.Iterations,
-		ToolCalls:    run.ToolCallsRan,
-	}, nil
+	return result, nil
 }
