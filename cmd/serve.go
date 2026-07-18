@@ -13,6 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"agent_stock/internal/bootstrap"
 	"agent_stock/internal/config"
 	httpserver "agent_stock/internal/http"
 	"agent_stock/internal/provider"
@@ -68,10 +69,16 @@ func runServe() {
 		slog.Error("failed to init workspace", "error", err, "path", cfg.WorkspacePath)
 		os.Exit(1)
 	}
+	if err := bootstrap.SeedIfMissing(ws.Root()); err != nil {
+		slog.Error("failed to seed workspace bootstrap", "error", err)
+		os.Exit(1)
+	}
+	bootFiles := bootstrap.Load(ws.Root())
+
 	toolReg := tools.NewRegistry()
 	tools.RegisterBuiltins(toolReg, ws)
 
-	sessionSvc := session.NewService(sessionStore, llm, toolReg, cfg.SystemPrompt, cfg.MaxToolIterations)
+	sessionSvc := session.NewService(sessionStore, llm, toolReg, ws.Root(), cfg.SystemPrompt, cfg.MaxToolIterations)
 	srv := httpserver.New(cfg, Version, sessionSvc)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -89,6 +96,7 @@ func runServe() {
 			"addr", cfg.Addr(),
 			"database", cfg.DatabasePath,
 			"workspace", ws.Root(),
+			"bootstrap", bootstrap.PresentNames(bootFiles),
 			"llm_provider", llm.Name(),
 			"llm_model", llm.DefaultModel(),
 			"tools", toolReg.Names(),

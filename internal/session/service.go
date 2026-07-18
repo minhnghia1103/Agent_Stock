@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"agent_stock/internal/agent"
+	"agent_stock/internal/bootstrap"
 	"agent_stock/internal/provider"
 	"agent_stock/internal/store"
 	"agent_stock/internal/tools"
@@ -19,16 +20,25 @@ type Service struct {
 	sessions     store.SessionStore
 	llm          provider.Provider
 	tools        *tools.Registry
-	systemPrompt string
+	workspaceDir string
+	basePrompt   string
 	maxIter      int
 }
 
-func NewService(sessions store.SessionStore, llm provider.Provider, toolReg *tools.Registry, systemPrompt string, maxIter int) *Service {
+func NewService(
+	sessions store.SessionStore,
+	llm provider.Provider,
+	toolReg *tools.Registry,
+	workspaceDir string,
+	basePrompt string,
+	maxIter int,
+) *Service {
 	return &Service{
 		sessions:     sessions,
 		llm:          llm,
 		tools:        toolReg,
-		systemPrompt: systemPrompt,
+		workspaceDir: workspaceDir,
+		basePrompt:   basePrompt,
 		maxIter:      maxIter,
 	}
 }
@@ -44,7 +54,8 @@ type TurnResult struct {
 	ToolCalls    int
 }
 
-// ChatTurn loads history, runs agent loop (tools), persists user+assistant.
+// ChatTurn loads history, builds system prompt from workspace markdown,
+// runs agent loop, persists user+assistant.
 func (s *Service) ChatTurn(ctx context.Context, sessionID, message string) (*TurnResult, error) {
 	if message == "" {
 		return nil, fmt.Errorf("message is required")
@@ -65,11 +76,11 @@ func (s *Service) ChatTurn(ctx context.Context, sessionID, message string) (*Tur
 		return nil, err
 	}
 
+	// Reload markdown each turn so edits apply without restart (Phase 5 Done).
+	files := bootstrap.Load(s.workspaceDir)
+	prompt := bootstrap.BuildSystemPrompt(s.basePrompt, files)
+
 	msgs := make([]provider.Message, 0, len(history)+2)
-	prompt := s.systemPrompt
-	if prompt == "" {
-		prompt = "You are a helpful stock research assistant. Use tools when they improve accuracy."
-	}
 	msgs = append(msgs, provider.Message{Role: provider.RoleSystem, Content: prompt})
 	for _, m := range history {
 		msgs = append(msgs, provider.Message{Role: m.Role, Content: m.Content})
@@ -106,6 +117,7 @@ func (s *Service) ChatTurn(ctx context.Context, sessionID, message string) (*Tur
 		"message_count", n,
 		"iterations", run.Iterations,
 		"tool_calls", run.ToolCallsRan,
+		"bootstrap", bootstrap.PresentNames(files),
 	)
 
 	return &TurnResult{
