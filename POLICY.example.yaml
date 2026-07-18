@@ -1,0 +1,36 @@
+# Example security policy. Copy to POLICY.yaml and adjust.
+# Env: AGENT_POLICY_PATH=POLICY.yaml
+
+prompt_injection:
+  enabled: true
+  action: warn   # off | log | warn | block
+  max_scan_chars: 50000
+
+tool_permissions:
+  enabled: true
+  allowlist:
+    - get_time
+    - read_file
+    - list_dir
+    - write_file
+    - web_fetch
+    - get_stock_quote
+  denylist:
+    - bash
+    - exec
+    - shell
+
+network:
+  deny_private_ips: true
+  deny_localhost_hostnames:
+    - localhost
+    - localhost.localdomain
+    - metadata.google.internal
+  enabled: false
+  allowlist_hosts: []
+
+output_redaction:
+  enabled: true
+
+websocket:
+  allowed_origins: []

@@ -12,5 +12,6 @@ func Defaults() Config {
 		SystemPrompt:      "You are a helpful stock research assistant. Use tools when they improve accuracy (time, files, web_fetch, get_stock_quote).",
 		WorkspacePath:     "workspace",
 		MaxToolIterations: 8,
+		PolicyPath:        "POLICY.yaml",
 	}
 }

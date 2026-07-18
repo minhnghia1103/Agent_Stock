@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,9 +17,29 @@ import (
 var wsUpgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
-	CheckOrigin: func(r *http.Request) bool {
-		return true // Phase 6 learning; tighten in Phase 7/10
-	},
+}
+
+func (s *Server) checkWSOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	var allowed []string
+	if s.policy != nil {
+		allowed = s.policy.WebSocket.AllowedOrigins
+	}
+	if len(allowed) == 0 {
+		// Dev-friendly: allow missing Origin (curl/websocat) and same-host/local.
+		return origin == "" || originIsLocal(origin, r.Host)
+	}
+	for _, a := range allowed {
+		if a == "*" || a == origin {
+			return true
+		}
+	}
+	slog.Warn("security.ws_origin_denied", "origin", origin, "host", r.Host)
+	return false
+}
+
+func originIsLocal(origin, host string) bool {
+	return strings.Contains(origin, "localhost") || strings.Contains(origin, "127.0.0.1") || strings.Contains(origin, host)
 }
 
 type wsClient struct {
@@ -34,7 +55,9 @@ func (c *wsClient) send(v any) error {
 }
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
-	conn, err := wsUpgrader.Upgrade(w, r, nil)
+	upgrader := wsUpgrader
+	upgrader.CheckOrigin = s.checkWSOrigin
+	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		slog.Error("ws upgrade failed", "error", err)
 		return

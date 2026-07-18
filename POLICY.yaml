@@ -1,0 +1,44 @@
+# Phase 7 security policy (product defaults — tune per deploy).
+# Copy from POLICY.example.yaml if needed. Path: AGENT_POLICY_PATH
+
+prompt_injection:
+  enabled: true
+  # off | log | warn | block
+  action: warn
+  max_scan_chars: 50000
+
+tool_permissions:
+  # When enabled=true: deny-by-default unless allowlisted (denylist always wins).
+  enabled: true
+  allowlist:
+    - get_time
+    - read_file
+    - list_dir
+    - write_file
+    - web_fetch
+    - get_stock_quote
+  denylist:
+    - bash
+    - exec
+    - shell
+    - run_terminal
+
+network:
+  # Always block private/loopback/link-local/metadata IPs for outbound URL tools.
+  deny_private_ips: true
+  deny_localhost_hostnames:
+    - localhost
+    - localhost.localdomain
+    - metadata.google.internal
+  # When enabled=true: only allowlist_hosts may be fetched (fail-closed).
+  enabled: false
+  allowlist_hosts:
+    - query1.finance.yahoo.com
+    - query2.finance.yahoo.com
+
+output_redaction:
+  enabled: true
+
+websocket:
+  # Empty = allow missing/empty Origin (local curl/websocat). Non-empty = allowlist.
+  allowed_origins: []

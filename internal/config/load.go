@@ -71,6 +71,9 @@ func applyEnv(cfg *Config) {
 			cfg.MaxToolIterations = n
 		}
 	}
+	if v := os.Getenv("AGENT_POLICY_PATH"); v != "" {
+		cfg.PolicyPath = v
+	}
 }
 
 func (c *Config) validate() error {

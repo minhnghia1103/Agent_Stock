@@ -4,20 +4,22 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
+
+	"agent_stock/internal/security"
 )
 
 type webFetchTool struct {
 	client *http.Client
+	policy *security.Policy
 }
 
-func NewWebFetchTool() Tool {
+func NewWebFetchTool(pol *security.Policy) Tool {
 	return &webFetchTool{
 		client: &http.Client{Timeout: 15 * time.Second},
+		policy: pol,
 	}
 }
 
@@ -38,10 +40,10 @@ func (t *webFetchTool) Parameters() map[string]any {
 func (t *webFetchTool) Execute(ctx context.Context, args map[string]any) Result {
 	raw := StringArg(args, "url")
 	u, err := url.Parse(raw)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+	if err != nil || u.String() == "" {
 		return Err("url must be http or https")
 	}
-	if err := assertPublicHost(u.Hostname()); err != nil {
+	if err := security.AssertPublicURL(t.policy, raw); err != nil {
 		return Err(err.Error())
 	}
 
@@ -62,24 +64,4 @@ func (t *webFetchTool) Execute(ctx context.Context, args map[string]any) Result 
 		return Err(err.Error())
 	}
 	return OK(fmt.Sprintf("status=%d\n%s", resp.StatusCode, string(body)))
-}
-
-func assertPublicHost(host string) error {
-	host = strings.TrimSpace(host)
-	if host == "" {
-		return fmt.Errorf("empty host")
-	}
-	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
-		return fmt.Errorf("blocked host: %s", host)
-	}
-	ips, err := net.LookupIP(host)
-	if err != nil {
-		return fmt.Errorf("dns lookup: %w", err)
-	}
-	for _, ip := range ips {
-		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
-			return fmt.Errorf("blocked private/loopback IP for host %s", host)
-		}
-	}
-	return nil
 }

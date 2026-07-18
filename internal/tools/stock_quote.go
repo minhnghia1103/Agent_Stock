@@ -9,15 +9,21 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"agent_stock/internal/security"
 )
 
 // stockQuoteTool fetches a lightweight quote via Yahoo chart API (no API key).
 type stockQuoteTool struct {
 	client *http.Client
+	policy *security.Policy
 }
 
-func NewStockQuoteTool() Tool {
-	return &stockQuoteTool{client: &http.Client{Timeout: 12 * time.Second}}
+func NewStockQuoteTool(pol *security.Policy) Tool {
+	return &stockQuoteTool{
+		client: &http.Client{Timeout: 12 * time.Second},
+		policy: pol,
+	}
 }
 
 func (t *stockQuoteTool) Name() string { return "get_stock_quote" }
@@ -41,6 +47,10 @@ func (t *stockQuoteTool) Execute(ctx context.Context, args map[string]any) Resul
 	}
 
 	endpoint := "https://query1.finance.yahoo.com/v8/finance/chart/" + url.PathEscape(symbol) + "?interval=1d&range=1d"
+	if err := security.AssertPublicURL(t.policy, endpoint); err != nil {
+		return Err(err.Error())
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return Err(err.Error())

@@ -3,19 +3,28 @@ package tools
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 
 	"agent_stock/internal/provider"
+	"agent_stock/internal/security"
 )
 
 // Registry holds named tools (Registry pattern).
 type Registry struct {
-	mu    sync.RWMutex
-	tools map[string]Tool
+	mu     sync.RWMutex
+	tools  map[string]Tool
+	policy *security.Policy
 }
 
 func NewRegistry() *Registry {
 	return &Registry{tools: make(map[string]Tool)}
+}
+
+func (r *Registry) SetPolicy(p *security.Policy) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.policy = p
 }
 
 func (r *Registry) Register(t Tool) {
@@ -41,12 +50,17 @@ func (r *Registry) Names() []string {
 	return out
 }
 
-// Definitions returns OpenAI-style tool schemas for the LLM.
+// Definitions returns tool schemas allowed by policy.
 func (r *Registry) Definitions() []provider.ToolDefinition {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := make([]provider.ToolDefinition, 0, len(r.tools))
 	for _, t := range r.tools {
+		if r.policy != nil {
+			if err := r.policy.AllowTool(t.Name()); err != nil {
+				continue
+			}
+		}
 		out = append(out, provider.ToolDefinition{
 			Name:        t.Name(),
 			Description: t.Description(),
@@ -56,8 +70,19 @@ func (r *Registry) Definitions() []provider.ToolDefinition {
 	return out
 }
 
-// Execute looks up and runs a tool by name.
+// Execute checks policy, runs the tool, then redacts output.
 func (r *Registry) Execute(ctx context.Context, name, rawArgs string) Result {
+	r.mu.RLock()
+	pol := r.policy
+	r.mu.RUnlock()
+
+	if pol != nil {
+		if err := pol.AllowTool(name); err != nil {
+			slog.Warn("security.tool_denied", "tool", name, "error", err)
+			return Err(err.Error())
+		}
+	}
+
 	t, ok := r.Get(name)
 	if !ok {
 		return Err(fmt.Sprintf("unknown tool: %s", name))
@@ -66,5 +91,7 @@ func (r *Registry) Execute(ctx context.Context, name, rawArgs string) Result {
 	if err != nil {
 		return Err(fmt.Sprintf("invalid tool arguments JSON: %v", err))
 	}
-	return t.Execute(ctx, args)
+	res := t.Execute(ctx, args)
+	res.Content = security.Redact(pol, res.Content)
+	return res
 }

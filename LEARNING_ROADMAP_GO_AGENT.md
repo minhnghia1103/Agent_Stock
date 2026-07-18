@@ -305,7 +305,7 @@ Mỗi phase: **Done** = hành vi phase đó giữ được sau restart (và sẵ
 | External tools untrusted | — | `security/external_tools.py` |
 | Docs | security logs `slog.Warn("security.*")` | `docs/security/README.md`, `docs/security/implementation/*` |
 
-**Done:** test cố ý path escape / SSRF / injection bị chặn.
+**Done:** test cố ý path escape / SSRF / injection bị chặn (`internal/security/*_test.go`, `internal/tools/workspace_test.go`). Wire: `POLICY.yaml` + `AGENT_POLICY_PATH`, registry allow/deny + redact, SSRF trên `web_fetch`/`get_stock_quote`, input guard trước agent turn, WS origin allowlist.
 
 **Patterns học:** Chain of Responsibility (auth→RBAC→injection→policy→sandbox→redact) · Policy Object / Guard · Decorator (scrub/redact) · Deny-by-default
 

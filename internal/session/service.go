@@ -12,6 +12,7 @@ import (
 	"agent_stock/internal/bootstrap"
 	"agent_stock/internal/progress"
 	"agent_stock/internal/provider"
+	"agent_stock/internal/security"
 	"agent_stock/internal/store"
 	"agent_stock/internal/tools"
 )
@@ -24,6 +25,8 @@ type Service struct {
 	workspaceDir string
 	basePrompt   string
 	maxIter      int
+	policy       *security.Policy
+	guard        *security.InputGuard
 }
 
 func NewService(
@@ -33,6 +36,8 @@ func NewService(
 	workspaceDir string,
 	basePrompt string,
 	maxIter int,
+	pol *security.Policy,
+	guard *security.InputGuard,
 ) *Service {
 	return &Service{
 		sessions:     sessions,
@@ -41,6 +46,8 @@ func NewService(
 		workspaceDir: workspaceDir,
 		basePrompt:   basePrompt,
 		maxIter:      maxIter,
+		policy:       pol,
+		guard:        guard,
 	}
 }
 
@@ -67,6 +74,10 @@ func (s *Service) ChatTurnWithEvents(ctx context.Context, sessionID, message str
 	}
 	if s.llm == nil {
 		return nil, fmt.Errorf("llm provider not configured")
+	}
+	if err := security.CheckUserMessage(s.policy, s.guard, message); err != nil {
+		progress.Emit(emit, progress.EventError, map[string]any{"message": err.Error()})
+		return nil, err
 	}
 	if sessionID == "" {
 		sessionID = uuid.NewString()
@@ -106,10 +117,12 @@ func (s *Service) ChatTurnWithEvents(ctx context.Context, sessionID, message str
 		return nil, err
 	}
 
+	reply := security.Redact(s.policy, run.Content)
+
 	now := time.Now().UTC()
 	if err := s.sessions.AppendMessages(ctx, sessionID,
 		store.Message{Role: store.RoleUser, Content: message, CreatedAt: now},
-		store.Message{Role: store.RoleAssistant, Content: run.Content, CreatedAt: now},
+		store.Message{Role: store.RoleAssistant, Content: reply, CreatedAt: now},
 	); err != nil {
 		return nil, err
 	}
@@ -121,7 +134,7 @@ func (s *Service) ChatTurnWithEvents(ctx context.Context, sessionID, message str
 
 	result := &TurnResult{
 		SessionID:    sessionID,
-		Reply:        run.Content,
+		Reply:        reply,
 		MessageCount: n,
 		Model:        run.Model,
 		Usage:        run.Usage,

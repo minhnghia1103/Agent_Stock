@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"agent_stock/internal/provider"
+	"agent_stock/internal/security"
 )
 
 // ChatRequest is the body for POST /v1/chat.
@@ -57,7 +58,12 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		typ := "internal_error"
 		msg := "chat turn failed"
 		var httpErr *provider.HTTPError
-		if errors.As(err, &httpErr) {
+		switch {
+		case errors.Is(err, security.ErrPromptBlocked):
+			status = http.StatusBadRequest
+			typ = "security_blocked"
+			msg = err.Error()
+		case errors.As(err, &httpErr):
 			status = http.StatusBadGateway
 			typ = "llm_error"
 			msg = httpErr.Error()

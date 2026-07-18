@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"agent_stock/internal/security"
 )
 
 // --- get_time ---
@@ -154,11 +156,11 @@ func (t *writeFileTool) Execute(ctx context.Context, args map[string]any) Result
 }
 
 // DefaultBuiltins registers Phase 4 filesystem + time tools.
-func RegisterBuiltins(reg *Registry, ws *Workspace) {
+func RegisterBuiltins(reg *Registry, ws *Workspace, pol *security.Policy) {
 	reg.Register(NewGetTimeTool())
 	reg.Register(NewReadFileTool(ws))
 	reg.Register(NewListDirTool(ws))
 	reg.Register(NewWriteFileTool(ws))
-	reg.Register(NewWebFetchTool())
-	reg.Register(NewStockQuoteTool())
+	reg.Register(NewWebFetchTool(pol))
+	reg.Register(NewStockQuoteTool(pol))
 }
