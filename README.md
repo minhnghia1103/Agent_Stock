@@ -1,0 +1,1 @@
+# Xây dựng một agent dành cho phân tích chứng khoán (macro, sector, symbol)
