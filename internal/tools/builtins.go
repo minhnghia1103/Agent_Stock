@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"agent_stock/internal/security"
+	"agent_stock/internal/skills"
 )
 
 // --- get_time ---
@@ -155,7 +156,7 @@ func (t *writeFileTool) Execute(ctx context.Context, args map[string]any) Result
 	return OK(fmt.Sprintf("wrote %d bytes to %s", len(content), path))
 }
 
-// DefaultBuiltins registers Phase 4 filesystem + time tools.
+// RegisterBuiltins registers Phase 4 filesystem + time tools (+ Phase 9 skills if reg non-nil).
 func RegisterBuiltins(reg *Registry, ws *Workspace, pol *security.Policy) {
 	reg.Register(NewGetTimeTool())
 	reg.Register(NewReadFileTool(ws))
@@ -163,4 +164,13 @@ func RegisterBuiltins(reg *Registry, ws *Workspace, pol *security.Policy) {
 	reg.Register(NewWriteFileTool(ws))
 	reg.Register(NewWebFetchTool(pol))
 	reg.Register(NewStockQuoteTool(pol))
+}
+
+// RegisterSkillTools registers skill_search and use_skill.
+func RegisterSkillTools(reg *Registry, skillsReg *skills.Registry) {
+	if skillsReg == nil {
+		return
+	}
+	reg.Register(NewSkillSearchTool(skillsReg))
+	reg.Register(NewUseSkillTool(skillsReg))
 }

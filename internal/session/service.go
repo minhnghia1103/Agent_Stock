@@ -13,6 +13,8 @@ import (
 	"agent_stock/internal/progress"
 	"agent_stock/internal/provider"
 	"agent_stock/internal/security"
+	"agent_stock/internal/skills"
+	"agent_stock/internal/slash"
 	"agent_stock/internal/store"
 	"agent_stock/internal/tools"
 )
@@ -22,6 +24,7 @@ type Service struct {
 	sessions     store.SessionStore
 	llm          provider.Provider
 	tools        *tools.Registry
+	skills       *skills.Registry
 	workspaceDir string
 	basePrompt   string
 	maxIter      int
@@ -33,6 +36,7 @@ func NewService(
 	sessions store.SessionStore,
 	llm provider.Provider,
 	toolReg *tools.Registry,
+	skillsReg *skills.Registry,
 	workspaceDir string,
 	basePrompt string,
 	maxIter int,
@@ -43,6 +47,7 @@ func NewService(
 		sessions:     sessions,
 		llm:          llm,
 		tools:        toolReg,
+		skills:       skillsReg,
 		workspaceDir: workspaceDir,
 		basePrompt:   basePrompt,
 		maxIter:      maxIter,
@@ -60,6 +65,7 @@ type TurnResult struct {
 	Usage        *provider.Usage
 	Iterations   int
 	ToolCalls    int
+	Slash        string `json:"slash,omitempty"`
 }
 
 // ChatTurn runs a non-streaming chat turn.
@@ -72,13 +78,6 @@ func (s *Service) ChatTurnWithEvents(ctx context.Context, sessionID, message str
 	if message == "" {
 		return nil, fmt.Errorf("message is required")
 	}
-	if s.llm == nil {
-		return nil, fmt.Errorf("llm provider not configured")
-	}
-	if err := security.CheckUserMessage(s.policy, s.guard, message); err != nil {
-		progress.Emit(emit, progress.EventError, map[string]any{"message": err.Error()})
-		return nil, err
-	}
 	if sessionID == "" {
 		sessionID = uuid.NewString()
 	}
@@ -87,13 +86,63 @@ func (s *Service) ChatTurnWithEvents(ctx context.Context, sessionID, message str
 		return nil, err
 	}
 
+	originalMessage := message
+
+	// Slash short-circuit before injection guard / LLM (Chain of Responsibility).
+	var slashCmd string
+	if slash.IsSlash(message) {
+		sr := slash.Dispatch(message, s.skills)
+		if sr.Handled && sr.Action == slash.ActionDirect {
+			progress.Emit(emit, progress.EventRunStarted, map[string]any{"session_id": sessionID, "slash": sr.Command})
+			reply := security.Redact(s.policy, sr.Reply)
+			if err := s.persistTurn(ctx, sessionID, originalMessage, reply); err != nil {
+				return nil, err
+			}
+			n, err := s.sessions.CountMessages(ctx, sessionID)
+			if err != nil {
+				return nil, err
+			}
+			result := &TurnResult{
+				SessionID:    sessionID,
+				Reply:        reply,
+				MessageCount: n,
+				Slash:        sr.Command,
+			}
+			progress.Emit(emit, progress.EventRunCompleted, map[string]any{
+				"session_id":    result.SessionID,
+				"reply":         result.Reply,
+				"message_count": result.MessageCount,
+				"slash":         sr.Command,
+			})
+			slog.Info("slash direct", "session_id", sessionID, "slash", sr.Command)
+			return result, nil
+		}
+		if sr.Handled && sr.Action == slash.ActionContinue {
+			message = sr.EffectiveMsg
+			slashCmd = sr.Command
+			slog.Info("slash continue", "session_id", sessionID, "slash", sr.Command)
+		}
+	}
+
+	if err := security.CheckUserMessage(s.policy, s.guard, message); err != nil {
+		progress.Emit(emit, progress.EventError, map[string]any{"message": err.Error()})
+		return nil, err
+	}
+	if s.llm == nil {
+		return nil, fmt.Errorf("llm provider not configured")
+	}
+
 	history, err := s.sessions.ListMessages(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
 
 	files := bootstrap.Load(s.workspaceDir)
-	prompt := bootstrap.BuildSystemPrompt(s.basePrompt, files)
+	skillsSection := ""
+	if s.skills != nil {
+		skillsSection = s.skills.FormatMetadataSection()
+	}
+	prompt := bootstrap.BuildSystemPromptWithSkills(s.basePrompt, files, skillsSection)
 
 	msgs := make([]provider.Message, 0, len(history)+2)
 	msgs = append(msgs, provider.Message{Role: provider.RoleSystem, Content: prompt})
@@ -119,11 +168,7 @@ func (s *Service) ChatTurnWithEvents(ctx context.Context, sessionID, message str
 
 	reply := security.Redact(s.policy, run.Content)
 
-	now := time.Now().UTC()
-	if err := s.sessions.AppendMessages(ctx, sessionID,
-		store.Message{Role: store.RoleUser, Content: message, CreatedAt: now},
-		store.Message{Role: store.RoleAssistant, Content: reply, CreatedAt: now},
-	); err != nil {
+	if err := s.persistTurn(ctx, sessionID, originalMessage, reply); err != nil {
 		return nil, err
 	}
 
@@ -140,6 +185,7 @@ func (s *Service) ChatTurnWithEvents(ctx context.Context, sessionID, message str
 		Usage:        run.Usage,
 		Iterations:   run.Iterations,
 		ToolCalls:    run.ToolCallsRan,
+		Slash:        slashCmd,
 	}
 
 	payload := map[string]any{
@@ -166,4 +212,12 @@ func (s *Service) ChatTurnWithEvents(ctx context.Context, sessionID, message str
 	)
 
 	return result, nil
+}
+
+func (s *Service) persistTurn(ctx context.Context, sessionID, userMsg, reply string) error {
+	now := time.Now().UTC()
+	return s.sessions.AppendMessages(ctx, sessionID,
+		store.Message{Role: store.RoleUser, Content: userMsg, CreatedAt: now},
+		store.Message{Role: store.RoleAssistant, Content: reply, CreatedAt: now},
+	)
 }

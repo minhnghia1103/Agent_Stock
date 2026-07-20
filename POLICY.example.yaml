@@ -16,6 +16,8 @@ tool_permissions:
     - web_fetch
     - get_stock_quote
     - mcp_*
+    - skill_search
+    - use_skill
   denylist:
     - bash
     - exec

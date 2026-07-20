@@ -72,6 +72,11 @@ func loadOne(dir, name string) File {
 
 // BuildSystemPrompt composes base prompt + present bootstrap sections.
 func BuildSystemPrompt(base string, files []File) string {
+	return BuildSystemPromptWithSkills(base, files, "")
+}
+
+// BuildSystemPromptWithSkills appends an optional skills metadata section.
+func BuildSystemPromptWithSkills(base string, files []File, skillsSection string) string {
 	var b strings.Builder
 	base = strings.TrimSpace(base)
 	if base == "" {
@@ -95,6 +100,11 @@ func BuildSystemPrompt(base string, files []File) string {
 	}
 	if !any {
 		b.WriteString("\n_(No workspace markdown loaded yet.)_\n")
+	}
+	if sec := strings.TrimSpace(skillsSection); sec != "" {
+		b.WriteString("\n")
+		b.WriteString(sec)
+		b.WriteString("\n")
 	}
 	return b.String()
 }

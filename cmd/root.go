@@ -23,6 +23,7 @@ func init() {
 
 	rootCmd.AddCommand(versionCmd())
 	rootCmd.AddCommand(serveCmd())
+	rootCmd.AddCommand(skillsCmd())
 }
 
 func versionCmd() *cobra.Command {

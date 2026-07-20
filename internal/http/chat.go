@@ -26,6 +26,7 @@ type ChatResponse struct {
 	Usage        *provider.Usage `json:"usage,omitempty"`
 	Iterations   int             `json:"iterations,omitempty"`
 	ToolCalls    int             `json:"tool_calls,omitempty"`
+	Slash        string          `json:"slash,omitempty"`
 }
 
 func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
@@ -90,5 +91,6 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		Usage:        result.Usage,
 		Iterations:   result.Iterations,
 		ToolCalls:    result.ToolCalls,
+		Slash:        result.Slash,
 	})
 }

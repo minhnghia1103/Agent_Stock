@@ -21,6 +21,7 @@ type Config struct {
 
 	PolicyPath  string
 	MCPJSONPath string
+	SkillsPath  string // optional: direct skills dir override (AGENT_SKILLS_PATH)
 }
 
 // Addr returns host:port for net/http.

@@ -358,7 +358,7 @@ Mỗi phase: **Done** = hành vi phase đó giữ được sau restart (và sẵ
 | Bridges | — | `slash/http_bridge.py`, `cli_bridge.py`, `kafka_bridge.py` |
 | Docs | — | `docs/SLASH_COMMANDS_SETUP.md` |
 
-**Done:** skill inject metadata; `/skills` hoạt động trên HTTP + CLI.
+**Done:** skill inject metadata; `/skills` hoạt động trên HTTP + CLI (`workspace/skills/*/SKILL.md`, tools `skill_search`/`use_skill`, slash `/help` `/skills` `/<slug>`, `GET /v1/skills`, `go run . skills list`). Grants/upload/watcher → sau.
 
 **Patterns học:** Progressive Disclosure (skill metadata trước, body khi cần) · Plugin / Registry · Command (slash short-circuit) · Chain of Responsibility (ingress trước agent)
 
