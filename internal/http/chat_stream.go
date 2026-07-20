@@ -52,7 +52,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		flusher.Flush()
 	}
 
-	_, err := s.sessions.ChatTurnWithEvents(r.Context(), req.SessionID, req.Message, writeSSE)
+	_, err := s.sessions.ChatTurnWithEvents(r.Context(), req.SessionID, req.Message, req.AgentID, writeSSE)
 	if err != nil {
 		slog.Error("chat stream failed", "request_id", reqID, "error", err)
 		msg := err.Error()

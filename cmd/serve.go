@@ -13,6 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"agent_stock/internal/auth"
 	"agent_stock/internal/bootstrap"
 	"agent_stock/internal/config"
 	httpserver "agent_stock/internal/http"
@@ -50,16 +51,23 @@ func runServe() {
 	}
 	guard := security.NewInputGuard()
 
-	sessionStore, err := sqlite.Open(cfg.DatabasePath, sqlite.SchemaSQL())
+	db, err := sqlite.Open(cfg.DatabasePath, sqlite.SchemaSQL())
 	if err != nil {
 		slog.Error("failed to open database", "error", err, "path", cfg.DatabasePath)
 		os.Exit(1)
 	}
 	defer func() {
-		if err := sessionStore.Close(); err != nil {
+		if err := db.Close(); err != nil {
 			slog.Error("close database", "error", err)
 		}
 	}()
+
+	aliceKey, bobKey, err := auth.BootstrapDemo(context.Background(), db)
+	if err != nil {
+		slog.Error("failed to bootstrap identity", "error", err)
+		os.Exit(1)
+	}
+	authenticator := auth.NewAuthenticator(db)
 
 	llm, err := provider.NewFromConfig(provider.BuildConfig{
 		Name:         cfg.LLMProvider,
@@ -79,6 +87,7 @@ func runServe() {
 		slog.Error("failed to init workspace", "error", err, "path", cfg.WorkspacePath)
 		os.Exit(1)
 	}
+	// Shared skills catalog under workspace root (per-user jail still used for files/bootstrap).
 	if err := bootstrap.SeedIfMissing(ws.Root()); err != nil {
 		slog.Error("failed to seed workspace bootstrap", "error", err)
 		os.Exit(1)
@@ -110,8 +119,8 @@ func runServe() {
 	}
 	defer mcpMgr.Close()
 
-	sessionSvc := session.NewService(sessionStore, llm, toolReg, skillsReg, ws.Root(), cfg.SystemPrompt, cfg.MaxToolIterations, pol, guard)
-	srv := httpserver.New(cfg, Version, sessionSvc, pol, mcpMgr, skillsReg)
+	sessionSvc := session.NewService(db, db, llm, toolReg, skillsReg, ws.Root(), cfg.SystemPrompt, cfg.MaxToolIterations, pol, guard)
+	srv := httpserver.New(cfg, Version, sessionSvc, pol, mcpMgr, skillsReg, authenticator, db)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -142,6 +151,12 @@ func runServe() {
 			"tools", toolReg.Names(),
 			"tools_enabled", provider.SupportsTools(llm),
 			"injection_action", pol.PromptInjection.Action,
+			"auth", "api_key",
+		)
+		slog.Info("bootstrap api keys (dev)",
+			"alice", aliceKey,
+			"bob", bobKey,
+			"hint", "Authorization: Bearer <key>",
 		)
 		errCh <- httpServer.ListenAndServe()
 	}()

@@ -113,6 +113,7 @@ func (s *Server) handleWSRequest(r *http.Request, client *wsClient, frame protoc
 type wsChatParams struct {
 	Message   string `json:"message"`
 	SessionID string `json:"session_id"`
+	AgentID   string `json:"agent_id"`
 }
 
 func (s *Server) handleWSChatSend(r *http.Request, client *wsClient, frame protocol.Frame) {
@@ -136,7 +137,7 @@ func (s *Server) handleWSChatSend(r *http.Request, client *wsClient, frame proto
 		_ = client.send(protocol.EventFrame(ev.Type, ev.Payload))
 	}
 
-	result, err := s.sessions.ChatTurnWithEvents(r.Context(), params.SessionID, params.Message, emit)
+	result, err := s.sessions.ChatTurnWithEvents(r.Context(), params.SessionID, params.Message, params.AgentID, emit)
 	if err != nil {
 		_ = client.send(protocol.ResErr(frame.ID, err.Error()))
 		return
@@ -149,5 +150,6 @@ func (s *Server) handleWSChatSend(r *http.Request, client *wsClient, frame proto
 		"iterations":    result.Iterations,
 		"tool_calls":    result.ToolCalls,
 		"usage":         result.Usage,
+		"agent_id":      result.AgentID,
 	}))
 }

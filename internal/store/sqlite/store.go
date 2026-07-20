@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,7 +14,7 @@ import (
 	"agent_stock/internal/store"
 )
 
-// Store is a SQLite SessionStore.
+// Store is a SQLite SessionStore + IdentityStore.
 type Store struct {
 	db *sql.DB
 }
@@ -42,6 +43,10 @@ func Open(path string, migrateSQL string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
+	if err := migrateLegacy(db); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("migrate legacy: %w", err)
+	}
 
 	return &Store{db: db}, nil
 }
@@ -53,24 +58,67 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-func (s *Store) EnsureSession(ctx context.Context, sessionID string) error {
+func (s *Store) EnsureSession(ctx context.Context, sessionID string, owner store.SessionOwner) error {
+	if owner.UserID == "" {
+		return fmt.Errorf("user_id required")
+	}
+	if owner.AgentID == "" {
+		owner.AgentID = "default"
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO sessions (id, created_at, updated_at)
-		VALUES (?, ?, ?)
-		ON CONFLICT(id) DO UPDATE SET updated_at = excluded.updated_at
-	`, sessionID, now, now)
+
+	var existingUser string
+	err := s.db.QueryRowContext(ctx, `SELECT user_id FROM sessions WHERE id = ?`, sessionID).Scan(&existingUser)
+	if err == nil {
+		if existingUser != "" && existingUser != owner.UserID {
+			return store.ErrForbidden
+		}
+		_, err = s.db.ExecContext(ctx, `
+			UPDATE sessions
+			SET updated_at = ?, tenant_id = CASE WHEN tenant_id = '' THEN ? ELSE tenant_id END,
+			    user_id = CASE WHEN user_id = '' THEN ? ELSE user_id END,
+			    agent_id = CASE WHEN agent_id = '' OR agent_id = 'default' THEN ? ELSE agent_id END
+			WHERE id = ?
+		`, now, owner.TenantID, owner.UserID, owner.AgentID, sessionID)
+		if err != nil {
+			return fmt.Errorf("touch session: %w", err)
+		}
+		return nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("lookup session: %w", err)
+	}
+
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO sessions (id, tenant_id, user_id, agent_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, sessionID, owner.TenantID, owner.UserID, owner.AgentID, now, now)
 	if err != nil {
 		return fmt.Errorf("ensure session: %w", err)
 	}
 	return nil
 }
 
-func (s *Store) AppendMessages(ctx context.Context, sessionID string, msgs ...store.Message) error {
+func (s *Store) assertSessionOwner(ctx context.Context, sessionID string, owner store.SessionOwner) error {
+	var userID string
+	err := s.db.QueryRowContext(ctx, `SELECT user_id FROM sessions WHERE id = ?`, sessionID).Scan(&userID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return store.ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("lookup session: %w", err)
+	}
+	if userID != owner.UserID {
+		return store.ErrForbidden
+	}
+	return nil
+}
+
+func (s *Store) AppendMessages(ctx context.Context, sessionID string, owner store.SessionOwner, msgs ...store.Message) error {
 	if len(msgs) == 0 {
 		return nil
 	}
-	if err := s.EnsureSession(ctx, sessionID); err != nil {
+	if err := s.EnsureSession(ctx, sessionID, owner); err != nil {
 		return err
 	}
 
@@ -109,7 +157,10 @@ func (s *Store) AppendMessages(ctx context.Context, sessionID string, msgs ...st
 	return nil
 }
 
-func (s *Store) ListMessages(ctx context.Context, sessionID string) ([]store.Message, error) {
+func (s *Store) ListMessages(ctx context.Context, sessionID string, owner store.SessionOwner) ([]store.Message, error) {
+	if err := s.assertSessionOwner(ctx, sessionID, owner); err != nil {
+		return nil, err
+	}
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, session_id, role, content, created_at
 		FROM messages
@@ -141,7 +192,10 @@ func (s *Store) ListMessages(ctx context.Context, sessionID string) ([]store.Mes
 	return out, nil
 }
 
-func (s *Store) CountMessages(ctx context.Context, sessionID string) (int, error) {
+func (s *Store) CountMessages(ctx context.Context, sessionID string, owner store.SessionOwner) (int, error) {
+	if err := s.assertSessionOwner(ctx, sessionID, owner); err != nil {
+		return 0, err
+	}
 	var n int
 	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM messages WHERE session_id = ?`, sessionID).Scan(&n)
 	if err != nil {

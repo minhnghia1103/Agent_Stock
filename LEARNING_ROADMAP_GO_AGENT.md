@@ -384,7 +384,7 @@ Mỗi phase: **Done** = hành vi phase đó giữ được sau restart (và sẵ
 | Agents HTTP | `internal/http/agents.go`, `agents_sharing.go`, `agents_instances.go` | agent_id trong chat body + workspace |
 | Docs | — | `docs/multi-agent-multi-user/*` |
 
-**Done:** 2 user không đọc được session/workspace của nhau.
+**Done:** 2 user không đọc được session/workspace của nhau (Phase 10A: SQLite + API key auth; `workspace/private/{user}/{agent}`; agents CRUD nhẹ; Postgres/OAuth/grants → sau).
 
 **Patterns học:** Multi-tenancy (row-level + path-scoped) · Gateway + AuthN/AuthZ · RBAC · Repository (agents/grants) · Secrets Vault pattern (encrypted provider keys)
 

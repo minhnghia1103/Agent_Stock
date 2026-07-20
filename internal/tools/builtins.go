@@ -55,9 +55,12 @@ func (t *readFileTool) Parameters() map[string]any {
 	}
 }
 func (t *readFileTool) Execute(ctx context.Context, args map[string]any) Result {
-	_ = ctx
+	ws := t.ws
+	if root := JailRootFromContext(ctx); root != "" {
+		ws = &Workspace{root: root}
+	}
 	path := StringArg(args, "path")
-	abs, err := t.ws.Resolve(path)
+	abs, err := ws.Resolve(path)
 	if err != nil {
 		return Err(err.Error())
 	}
@@ -91,12 +94,15 @@ func (t *listDirTool) Parameters() map[string]any {
 	}
 }
 func (t *listDirTool) Execute(ctx context.Context, args map[string]any) Result {
-	_ = ctx
+	ws := t.ws
+	if root := JailRootFromContext(ctx); root != "" {
+		ws = &Workspace{root: root}
+	}
 	path := StringArg(args, "path")
 	if path == "" {
 		path = "."
 	}
-	abs, err := t.ws.Resolve(path)
+	abs, err := ws.Resolve(path)
 	if err != nil {
 		return Err(err.Error())
 	}
@@ -140,10 +146,13 @@ func (t *writeFileTool) Parameters() map[string]any {
 	}
 }
 func (t *writeFileTool) Execute(ctx context.Context, args map[string]any) Result {
-	_ = ctx
+	ws := t.ws
+	if root := JailRootFromContext(ctx); root != "" {
+		ws = &Workspace{root: root}
+	}
 	path := StringArg(args, "path")
 	content := StringArg(args, "content")
-	abs, err := t.ws.Resolve(path)
+	abs, err := ws.Resolve(path)
 	if err != nil {
 		return Err(err.Error())
 	}

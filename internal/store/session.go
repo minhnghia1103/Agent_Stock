@@ -19,11 +19,19 @@ type Message struct {
 	CreatedAt time.Time
 }
 
+// SessionOwner scopes a chat session to a user/agent.
+type SessionOwner struct {
+	TenantID string
+	UserID   string
+	AgentID  string
+}
+
 // SessionStore persists chat sessions and messages (Repository).
+// All reads/writes are ownership-checked (Phase 10A).
 type SessionStore interface {
-	EnsureSession(ctx context.Context, sessionID string) error
-	AppendMessages(ctx context.Context, sessionID string, msgs ...Message) error
-	ListMessages(ctx context.Context, sessionID string) ([]Message, error)
-	CountMessages(ctx context.Context, sessionID string) (int, error)
+	EnsureSession(ctx context.Context, sessionID string, owner SessionOwner) error
+	AppendMessages(ctx context.Context, sessionID string, owner SessionOwner, msgs ...Message) error
+	ListMessages(ctx context.Context, sessionID string, owner SessionOwner) ([]Message, error)
+	CountMessages(ctx context.Context, sessionID string, owner SessionOwner) (int, error)
 	Close() error
 }

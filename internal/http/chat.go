@@ -8,12 +8,14 @@ import (
 
 	"agent_stock/internal/provider"
 	"agent_stock/internal/security"
+	"agent_stock/internal/store"
 )
 
 // ChatRequest is the body for POST /v1/chat.
 type ChatRequest struct {
 	Message   string `json:"message"`
 	SessionID string `json:"session_id,omitempty"`
+	AgentID   string `json:"agent_id,omitempty"`
 }
 
 // ChatResponse is the chat reply.
@@ -27,6 +29,7 @@ type ChatResponse struct {
 	Iterations   int             `json:"iterations,omitempty"`
 	ToolCalls    int             `json:"tool_calls,omitempty"`
 	Slash        string          `json:"slash,omitempty"`
+	AgentID      string          `json:"agent_id,omitempty"`
 }
 
 func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
@@ -48,7 +51,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	reqID := RequestIDFromContext(r.Context())
-	result, err := s.sessions.ChatTurn(r.Context(), req.SessionID, req.Message)
+	result, err := s.sessions.ChatTurn(r.Context(), req.SessionID, req.Message, req.AgentID)
 	if err != nil {
 		slog.Error("chat turn failed",
 			"request_id", reqID,
@@ -60,6 +63,14 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		msg := "chat turn failed"
 		var httpErr *provider.HTTPError
 		switch {
+		case errors.Is(err, store.ErrForbidden):
+			status = http.StatusForbidden
+			typ = "forbidden"
+			msg = err.Error()
+		case errors.Is(err, store.ErrNotFound):
+			status = http.StatusNotFound
+			typ = "not_found"
+			msg = err.Error()
 		case errors.Is(err, security.ErrPromptBlocked):
 			status = http.StatusBadRequest
 			typ = "security_blocked"
@@ -76,6 +87,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	slog.Info("chat turn",
 		"request_id", reqID,
 		"session_id", result.SessionID,
+		"agent_id", result.AgentID,
 		"message_count", result.MessageCount,
 		"model", result.Model,
 		"iterations", result.Iterations,
@@ -92,5 +104,6 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		Iterations:   result.Iterations,
 		ToolCalls:    result.ToolCalls,
 		Slash:        result.Slash,
+		AgentID:      result.AgentID,
 	})
 }
