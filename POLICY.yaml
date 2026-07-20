@@ -17,6 +17,7 @@ tool_permissions:
     - write_file
     - web_fetch
     - get_stock_quote
+    - mcp_*
   denylist:
     - bash
     - exec

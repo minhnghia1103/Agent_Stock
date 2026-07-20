@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "./workspace"
+      ],
+      "allowed_tools": [],
+      "timeout_sec": 60,
+      "disabled": true,
+      "_comment": "Set disabled=false after installing Node/npx. Then restart or POST /v1/mcp/reload."
+    }
+  }
+}

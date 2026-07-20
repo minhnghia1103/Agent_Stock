@@ -74,6 +74,9 @@ func applyEnv(cfg *Config) {
 	if v := os.Getenv("AGENT_POLICY_PATH"); v != "" {
 		cfg.PolicyPath = v
 	}
+	if v := os.Getenv("AGENT_MCP_JSON"); v != "" {
+		cfg.MCPJSONPath = v
+	}
 }
 
 func (c *Config) validate() error {

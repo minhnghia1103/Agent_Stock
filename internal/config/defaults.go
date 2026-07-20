@@ -13,5 +13,6 @@ func Defaults() Config {
 		WorkspacePath:     "workspace",
 		MaxToolIterations: 8,
 		PolicyPath:        "POLICY.yaml",
+		MCPJSONPath:       "mcp.json",
 	}
 }

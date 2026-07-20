@@ -16,6 +16,7 @@ import (
 	"agent_stock/internal/bootstrap"
 	"agent_stock/internal/config"
 	httpserver "agent_stock/internal/http"
+	"agent_stock/internal/mcp"
 	"agent_stock/internal/provider"
 	"agent_stock/internal/security"
 	"agent_stock/internal/session"
@@ -87,8 +88,15 @@ func runServe() {
 	toolReg.SetPolicy(pol)
 	tools.RegisterBuiltins(toolReg, ws, pol)
 
+	mcpMgr := mcp.NewManager(toolReg, cfg.MCPJSONPath)
+	if err := mcpMgr.Start(context.Background()); err != nil {
+		slog.Error("failed to start mcp manager", "error", err, "path", cfg.MCPJSONPath)
+		os.Exit(1)
+	}
+	defer mcpMgr.Close()
+
 	sessionSvc := session.NewService(sessionStore, llm, toolReg, ws.Root(), cfg.SystemPrompt, cfg.MaxToolIterations, pol, guard)
-	srv := httpserver.New(cfg, Version, sessionSvc, pol)
+	srv := httpserver.New(cfg, Version, sessionSvc, pol, mcpMgr)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -106,6 +114,8 @@ func runServe() {
 			"database", cfg.DatabasePath,
 			"workspace", ws.Root(),
 			"policy", cfg.PolicyPath,
+			"mcp_json", cfg.MCPJSONPath,
+			"mcp_tools", mcpMgr.ToolNames(),
 			"bootstrap", bootstrap.PresentNames(bootFiles),
 			"llm_provider", llm.Name(),
 			"llm_model", llm.DefaultModel(),

@@ -327,7 +327,7 @@ Mỗi phase: **Done** = hành vi phase đó giữ được sau restart (và sẵ
 | Config | DB + config | `mcp.json`, `mcp.local.json` |
 | Docs | — | `docs/mcp_json_integration.md` |
 
-**Done:** 1 MCP server thật chạy trong agent loop.
+**Done:** 1 MCP server thật chạy trong agent loop (`mcp.json` stdio → `tools/list` → `BridgeTool` trong registry; `GET /v1/mcp/servers`, `POST /v1/mcp/reload`; policy `mcp_*`). Grants/BM25/HTTP admin CRUD → Phase 10+.
 
 **Patterns học:** Bridge / Adapter (MCP protocol ↔ tool interface) · Proxy (lazy connect) · Plugin Registry · Grants / Capability tokens
 

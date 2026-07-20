@@ -19,7 +19,8 @@ type Config struct {
 	WorkspacePath     string
 	MaxToolIterations int
 
-	PolicyPath string
+	PolicyPath  string
+	MCPJSONPath string
 }
 
 // Addr returns host:port for net/http.
